@@ -20,6 +20,7 @@ export default function DonatePage() {
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [totalDonated, setTotalDonated] = useState(null);
+  const [ethPrice, setEthPrice] = useState(null);
 
   // ABI for depositEth and getTotalToken
   const abi = [
@@ -70,8 +71,20 @@ export default function DonatePage() {
     }
   }
 
+  async function fetchEthPrice() {
+    try {
+      // Use CoinGecko API for ETH/USDT price
+      const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
+      const data = await res.json();
+      setEthPrice(data.ethereum.usd);
+    } catch {
+      setEthPrice(null);
+    }
+  }
+
   useEffect(() => {
     fetchTotalDonated();
+    fetchEthPrice();
     // eslint-disable-next-line
   }, []);
 
@@ -91,11 +104,15 @@ export default function DonatePage() {
       setStatus("Donation successful! Thank you.");
       setAmount("");
       fetchTotalDonated(); // Refresh total after donation
+      fetchEthPrice(); // Refresh price in case
     } catch (err) {
       setStatus("Error: " + (err.reason || err.message || "Transaction failed"));
     }
     setLoading(false);
   }
+
+  const totalDonatedUSD = totalDonated && ethPrice ? (parseFloat(totalDonated) * ethPrice).toFixed(2) : null;
+  const amountUSD = amount && ethPrice ? (parseFloat(amount) * ethPrice).toFixed(2) : null;
 
   return (
     <div style={{ maxWidth: 480, margin: "40px auto", padding: 24, border: "1px solid #eee", borderRadius: 8, fontFamily: 'sans-serif' }}>
@@ -109,6 +126,9 @@ export default function DonatePage() {
       <hr />
       <div style={{ margin: "16px 0", fontWeight: "bold" }}>
         Total Donated: {totalDonated === null ? "Loading..." : `${totalDonated} ETH`}
+        {totalDonatedUSD && (
+          <span> (~${totalDonatedUSD} USD)</span>
+        )}
       </div>
       {!account ? (
         <button onClick={connectWallet} style={{ padding: 8, margin: "16px 0" }}>Connect Wallet</button>
@@ -127,6 +147,11 @@ export default function DonatePage() {
             style={{ marginLeft: 8, padding: 4 }}
             disabled={loading}
           />
+          {amountUSD && (
+            <span style={{ marginLeft: 12, color: '#888' }}>
+              (~${amountUSD} USD)
+            </span>
+          )}
         </label>
       </div>
       <button onClick={donate} disabled={!account || !amount || loading} style={{ padding: 8 }}>
