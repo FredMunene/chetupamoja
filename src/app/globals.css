@@ -1,6 +1,7 @@
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ----------  LIGHT (default) ---------- */
+  --background: #ffffff;   /* pure white */
+  --foreground: #171717;   /* near‑black text */
 }
 
 @theme inline {
@@ -10,10 +11,13 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* ----------  SKY‑BLUE THEME FOR DARK PREFERENCE  ---------- */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* soft sky blue / cream white background */
+    --background: #e6f4ff;           /* you can nudge this lighter (#f1f9ff) or deeper (#d3ecff) */
+    /* deeper navy‑ink foreground for strong contrast on the pale background */
+    --foreground: #082a46;           /* tweak to taste */
   }
 }
 
