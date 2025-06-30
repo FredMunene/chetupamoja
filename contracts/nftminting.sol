@@ -61,7 +61,7 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
     );
     
     // Constructor
-    constructor() ERC721("DonationChampion", "DONFT") {}
+    constructor(address initialOwner) ERC721("DonationChampion", "DONFT") Ownable(initialOwner) {}
     
     // Modifier to restrict minting to owner (donation contract)
     modifier onlyMinter() {
@@ -380,10 +380,6 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
         return (hasFirstChampion[projectId], hasStealthNinja[projectId]);
     }
     
-    // Override required by Solidity
-    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
-        super._burn(tokenId);
-    }
     
     function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage) returns (string memory) {
         return super.tokenURI(tokenId);
