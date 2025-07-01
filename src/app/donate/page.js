@@ -169,16 +169,18 @@ export default function DonatePage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#fafbfc', padding: '40px 0' }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'flex-start',
-        gap: 32,
-        maxWidth: 1100,
-        margin: '0 auto',
-      }}>
+      <div
+        className="donate-flex-container"
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'flex-start',
+          gap: 32,
+          maxWidth: 1100,
+          margin: '0 auto',
+        }}>
         {/* Main Content */}
-        <div style={{ flex: 2, minWidth: 350 }}>
+        <div className="donate-main" style={{ flex: 2, minWidth: 350 }}>
           <h1 style={{ fontSize: 36, fontWeight: 700, marginBottom: 24 }}>{CAMPAIGN.title}</h1>
           {/* Campaign Image Card */}
           <div style={{
@@ -242,7 +244,7 @@ export default function DonatePage() {
           </div>
         </div>
         {/* Sidebar */}
-        <div style={{
+        <div className="donate-sidebar" style={{
           flex: 1,
           minWidth: 320,
           background: '#fff',
@@ -325,6 +327,35 @@ export default function DonatePage() {
           </div>
         </div>
       </div>
+      <style jsx global>{`
+        @media (max-width: 900px) {
+          .donate-flex-container {
+            flex-direction: column;
+            gap: 0;
+          }
+          .donate-main,
+          .donate-sidebar {
+            min-width: 0 !important;
+            max-width: 100% !important;
+            width: 100% !important;
+          }
+          .donate-sidebar {
+            margin-top: 32px;
+            position: static !important;
+          }
+        }
+        @media (max-width: 600px) {
+          .donate-main {
+            padding: 0 8px;
+          }
+          .donate-sidebar {
+            padding: 16px !important;
+          }
+          .donate-main h1 {
+            font-size: 24px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 } 
