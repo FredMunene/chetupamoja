@@ -28,6 +28,7 @@ export default function DonatePage() {
   const [userContribution, setUserContribution] = useState(null);
   const [recentDonations, setRecentDonations] = useState([]);
   const [numDeposits, setNumDeposits] = useState(null);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
 
   const abi = ProjectDonationContractWithNFT_metadata.output.abi;
 
@@ -217,7 +218,10 @@ export default function DonatePage() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-          }}>
+            cursor: 'pointer',
+          }}
+            onClick={() => setImageModalOpen(true)}
+          >
             <img
               src="/techchallenge.jpg"
               alt="Campaign"
@@ -239,6 +243,7 @@ export default function DonatePage() {
               fontWeight: 700,
               fontSize: 24,
               textShadow: '0 2px 8px #0006',
+              pointerEvents: 'none',
             }}>
               gofundme.org
               <div style={{ fontSize: 16, fontWeight: 400, marginTop: 8, background: '#fff8', color: '#333', borderRadius: 8, padding: '2px 10px', display: 'inline-block' }}>
@@ -246,6 +251,52 @@ export default function DonatePage() {
               </div>
             </div>
           </div>
+          {imageModalOpen && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              background: 'rgba(0,0,0,0.85)',
+              zIndex: 10000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+              onClick={() => setImageModalOpen(false)}
+            >
+              <img
+                src="/techchallenge.jpg"
+                alt="Campaign Full"
+                style={{
+                  maxWidth: '90vw',
+                  maxHeight: '90vh',
+                  borderRadius: 16,
+                  boxShadow: '0 4px 32px #0008',
+                  background: '#fff',
+                }}
+              />
+              <button
+                onClick={e => { e.stopPropagation(); setImageModalOpen(false); }}
+                style={{
+                  position: 'fixed',
+                  top: 24,
+                  right: 32,
+                  background: 'rgba(0,0,0,0.6)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 40,
+                  height: 40,
+                  fontSize: 24,
+                  cursor: 'pointer',
+                  zIndex: 10001,
+                }}
+                aria-label="Close image preview"
+              >×</button>
+            </div>
+          )}
           {/* Description */}
           <div style={{ fontSize: 18, color: '#222', marginBottom: 16 }}>{CAMPAIGN.description}</div>
           <ul style={{ fontSize: 16, color: '#444', marginBottom: 16, paddingLeft: 20 }}>
@@ -337,9 +388,9 @@ export default function DonatePage() {
             </button>
             <button style={{ width: '100%', background: '#f7b731', color: '#222', fontWeight: 700, fontSize: 18, border: 'none', borderRadius: 8, padding: '12px 0', marginBottom: 12, cursor: 'pointer', boxShadow: '0 1px 4px #0001' }}>Share</button>
             {status && <div style={{ marginTop: 16, color: status.startsWith("Error") ? "#a23" : "#00c16e", fontWeight: 500 }}>{status}</div>}
-            <div style={{ marginTop: 16, fontSize: 12, color: '#888' }}>
-              You must use MetaMask and be on Base Sepolia.<br />
-              <a href="https://sepoliafaucet.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#2a5bd7' }}>Get test ETH</a>
+            <div style={{ marginTop: 16, fontSize: 13, color: '#888', lineHeight: 1.6 }}>
+              <b>Note:</b> Please use the <span style={{ color: '#2a5bd7', fontWeight: 600 }}>Base</span> network and send <span style={{ color: '#2a5bd7', fontWeight: 600 }}>ETH</span> for your donation.<br />
+              Make sure your wallet is connected to Base.
             </div>
           </div>
         </div>
