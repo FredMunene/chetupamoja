@@ -25,6 +25,7 @@ export default function DonatePage() {
   const [totalDonated, setTotalDonated] = useState(null);
   const [ethPrice, setEthPrice] = useState(null);
   const [userContribution, setUserContribution] = useState(null);
+  const [recentDonations, setRecentDonations] = useState([]);
 
   const abi = ProjectDonationContractWithNFT_metadata.output.abi;
 
@@ -111,6 +112,31 @@ export default function DonatePage() {
     fetchUserContribution();
   }, [account, projectId]);
 
+  useEffect(() => {
+    async function fetchRecentDonations() {
+      if (!projectId || !ethPrice) {
+        setRecentDonations([]);
+        return;
+      }
+      try {
+        const providerEthers = new ethers.BrowserProvider(window.ethereum);
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, providerEthers);
+        const donorAddresses = await contract.getProjectDonors(projectId);
+        const donorInfo = [];
+        // Get up to last 3 donors (from end)
+        for (let i = Math.max(0, donorAddresses.length - 3); i < donorAddresses.length; i++) {
+          const donor = donorAddresses[i];
+          const amount = await contract.getDonorAmount(projectId, donor);
+          donorInfo.unshift({ donor, amount: amount.toString() }); // unshift for most recent first
+        }
+        setRecentDonations(donorInfo);
+      } catch {
+        setRecentDonations([]);
+      }
+    }
+    fetchRecentDonations();
+  }, [projectId, totalDonated, ethPrice]);
+
   async function donate() {
     setStatus("");
     setLoading(true);
@@ -162,15 +188,18 @@ export default function DonatePage() {
             marginBottom: 24,
             position: 'relative',
             boxShadow: '0 2px 12px #0001',
-            minHeight: 260,
+            aspectRatio: '16/9',
+            width: '100%',
+            height: 'auto',
+            maxHeight: 400,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}>
             <img
-              src="/public/techchallenge.jpg"
+              src="/techchallenge.jpg"
               alt="Campaign"
-              style={{ width: '100%', height: 260, objectFit: 'cover', opacity: 0.95 }}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block' }}
             />
             <div style={{
               position: 'absolute',
@@ -178,7 +207,7 @@ export default function DonatePage() {
               left: 0,
               width: '100%',
               height: '100%',
-              background: 'rgba(100,120,200,0.10)',
+              background: 'rgba(100,120,200,0.06)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'flex-end',
@@ -238,22 +267,23 @@ export default function DonatePage() {
           </div>
           {/* Share/Donate Buttons */}
           <button style={{ width: '100%', background: '#f7b731', color: '#222', fontWeight: 700, fontSize: 18, border: 'none', borderRadius: 8, padding: '12px 0', marginBottom: 12, cursor: 'pointer', boxShadow: '0 1px 4px #0001' }}>Share</button>
-          <button style={{ width: '100%', background: 'linear-gradient(90deg, #ffb347, #ffcc33)', color: '#222', fontWeight: 700, fontSize: 18, border: 'none', borderRadius: 8, padding: '12px 0', marginBottom: 20, cursor: 'pointer', boxShadow: '0 1px 4px #0001' }}>Donate now</button>
           {/* Recent Donations */}
-          <div style={{ color: '#a23', fontWeight: 600, marginBottom: 10 }}>20 people just donated</div>
-          <div style={{ fontSize: 15, color: '#444', marginBottom: 8 }}>
-            <b>Anonymous</b> $50 · <span style={{ color: '#2a5bd7' }}>Recent donation</span>
-          </div>
-          <div style={{ fontSize: 15, color: '#444', marginBottom: 8 }}>
-            <b>GoFundMe Inc.</b> $250,000 (Offline) · <span style={{ color: '#2a5bd7' }}>Top donation</span>
-          </div>
-          <div style={{ fontSize: 15, color: '#444', marginBottom: 16 }}>
-            <b>Anonymous</b> $20 · <span style={{ color: '#2a5bd7' }}>First donation</span>
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-            <button style={{ flex: 1, background: '#f5f6fa', border: '1px solid #e6eaf3', borderRadius: 8, padding: '8px 0', fontWeight: 600, color: '#2a5bd7', cursor: 'pointer' }}>See all</button>
-            <button style={{ flex: 1, background: '#f5f6fa', border: '1px solid #e6eaf3', borderRadius: 8, padding: '8px 0', fontWeight: 600, color: '#2a5bd7', cursor: 'pointer' }}>See top</button>
-          </div>
+          {recentDonations.length > 0 && (
+            <>
+              <div style={{ color: '#a23', fontWeight: 600, marginBottom: 10 }}>
+                {recentDonations.length} {recentDonations.length === 1 ? 'person' : 'people'} just donated
+              </div>
+              {recentDonations.map((entry, idx) => (
+                <div key={idx} style={{ fontSize: 15, color: '#444', marginBottom: 8 }}>
+                  <b>{entry.donor.slice(0, 6)}...{entry.donor.slice(-4)}</b> ${Number(ethers.formatEther(entry.amount) * ethPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+                <button style={{ flex: 1, background: '#f5f6fa', border: '1px solid #e6eaf3', borderRadius: 8, padding: '8px 0', fontWeight: 600, color: '#2a5bd7', cursor: 'pointer' }}>See all</button>
+                <button style={{ flex: 1, background: '#f5f6fa', border: '1px solid #e6eaf3', borderRadius: 8, padding: '8px 0', fontWeight: 600, color: '#2a5bd7', cursor: 'pointer' }}>See top</button>
+              </div>
+            </>
+          )}
           {/* User Contribution and ETH Donation Form */}
           <div style={{ margin: '32px 0 0 0', borderTop: '1px solid #eee', paddingTop: 24 }}>
             <div style={{ fontWeight: 600, marginBottom: 8 }}>Your Contribution</div>
