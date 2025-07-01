@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
+import { ethers } from "ethers";
+import ProjectDonationContractWithNFT_metadata from "./abi/ProjectDonationContractWithNFT_metadata.json";
 
 const CAMPAIGN = {
   title: "Tech Challenge Kenya 2025",
@@ -11,34 +13,19 @@ const CAMPAIGN = {
   ],
 };
 
-const CONTRACT_ADDRESS = "0x0295c3e9a72b5bf976ec6f26010cb940912c7cb1";
+const CONTRACT_ADDRESS = "0x6d5fdc15dc47254f266a90772bd8a12f849faf12";
 const BASE_SEPOLIA_CHAIN_ID = "0x14A34"; // 927,076 decimal
 
 export default function DonatePage() {
   const [account, setAccount] = useState(null);
   const [amount, setAmount] = useState("");
+  const [projectId, setProjectId] = useState("1");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [totalDonated, setTotalDonated] = useState(null);
   const [ethPrice, setEthPrice] = useState(null);
 
-  // ABI for depositEth and getTotalToken
-  const abi = [
-    {
-      "inputs": [],
-      "name": "depositEth",
-      "outputs": [],
-      "stateMutability": "payable",
-      "type": "function"
-    },
-    {
-      "inputs": [],
-      "name": "getTotalToken",
-      "outputs": [ { "internalType": "uint256", "name": "", "type": "uint256" } ],
-      "stateMutability": "view",
-      "type": "function"
-    }
-  ];
+  const abi = ProjectDonationContractWithNFT_metadata.output.abi;
 
   async function connectWallet() {
     if (!window.ethereum) {
@@ -60,9 +47,7 @@ export default function DonatePage() {
 
   async function fetchTotalDonated() {
     try {
-      if (!window.ethers) return;
-      const ethers = window.ethers;
-      const providerEthers = new ethers.BrowserProvider(window.ethereum || ethers.getDefaultProvider());
+      const providerEthers = new ethers.BrowserProvider(window.ethereum);
       const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, providerEthers);
       const total = await contract.getTotalToken();
       setTotalDonated(ethers.formatEther(total));
@@ -93,16 +78,20 @@ export default function DonatePage() {
     setLoading(true);
     try {
       if (!window.ethereum) throw new Error("MetaMask not found");
+      if (!projectId) throw new Error("Project ID is required");
       const provider = window.ethereum;
       const [from] = await provider.request({ method: "eth_requestAccounts" });
-      const ethers = window.ethers;
       const providerEthers = new ethers.BrowserProvider(provider);
       const signer = await providerEthers.getSigner();
       const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer);
-      const tx = await contract.depositEth({ value: ethers.parseEther(amount) });
+      const tx = await contract.depositETH(
+        projectId,
+        { value: ethers.parseEther(amount) }
+      );
       await tx.wait();
       setStatus("Donation successful! Thank you.");
       setAmount("");
+      setProjectId("");
       fetchTotalDonated(); // Refresh total after donation
       fetchEthPrice(); // Refresh price in case
     } catch (err) {
@@ -135,6 +124,7 @@ export default function DonatePage() {
       ) : (
         <div style={{ margin: "16px 0" }}>Connected: {account}</div>
       )}
+
       <div style={{ margin: "16px 0" }}>
         <label>
           Amount (ETH):
@@ -154,7 +144,7 @@ export default function DonatePage() {
           )}
         </label>
       </div>
-      <button onClick={donate} disabled={!account || !amount || loading} style={{ padding: 8 }}>
+      <button onClick={donate} disabled={!account || !amount || !projectId || loading} style={{ padding: 8 }}>
         {loading ? "Processing..." : "Donate"}
       </button>
       {status && <div style={{ marginTop: 16, color: status.startsWith("Error") ? "red" : "green" }}>{status}</div>}
