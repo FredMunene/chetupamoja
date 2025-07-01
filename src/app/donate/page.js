@@ -15,6 +15,7 @@ const CAMPAIGN = {
 
 const CONTRACT_ADDRESS = "0x6d5fdc15dc47254f266a90772bd8a12f849faf12";
 const BASE_SEPOLIA_CHAIN_ID = "0x14A34"; // 927,076 decimal
+const DONATION_GOAL = 3000; // USD
 
 export default function DonatePage() {
   const [account, setAccount] = useState(null);
@@ -26,6 +27,7 @@ export default function DonatePage() {
   const [ethPrice, setEthPrice] = useState(null);
   const [userContribution, setUserContribution] = useState(null);
   const [recentDonations, setRecentDonations] = useState([]);
+  const [numDeposits, setNumDeposits] = useState(null);
 
   const abi = ProjectDonationContractWithNFT_metadata.output.abi;
 
@@ -136,6 +138,24 @@ export default function DonatePage() {
     }
     fetchRecentDonations();
   }, [projectId, totalDonated, ethPrice]);
+
+  useEffect(() => {
+    async function fetchNumDeposits() {
+      if (!projectId) {
+        setNumDeposits(null);
+        return;
+      }
+      try {
+        const providerEthers = new ethers.BrowserProvider(window.ethereum);
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, providerEthers);
+        const depositIds = await contract.getProjectDeposits(projectId);
+        setNumDeposits(depositIds.length);
+      } catch {
+        setNumDeposits(null);
+      }
+    }
+    fetchNumDeposits();
+  }, [projectId, totalDonated]);
 
   async function donate() {
     setStatus("");
@@ -261,31 +281,27 @@ export default function DonatePage() {
               : `$${Number(totalDonated * ethPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`}
             <span style={{ fontSize: 16, color: '#888', fontWeight: 400 }}> raised</span>
           </div>
-          <div style={{ color: '#888', fontSize: 15, marginBottom: 12 }}>$2M goal · 13.7K donations</div>
+          <div style={{ color: '#888', fontSize: 15, marginBottom: 12 }}>
+            $3,000 goal · {numDeposits === null ? 'Loading...' : `${numDeposits} donation${numDeposits === 1 ? '' : 's'}`}
+          </div>
           {/* Progress Bar */}
           <div style={{ height: 16, background: '#e6eaf3', borderRadius: 8, marginBottom: 16, position: 'relative' }}>
-            <div style={{ width: '93%', height: '100%', background: 'linear-gradient(90deg, #00c16e, #2a5bd7)', borderRadius: 8 }}></div>
-            <div style={{ position: 'absolute', right: 8, top: 0, height: '100%', display: 'flex', alignItems: 'center', color: '#222', fontWeight: 600, fontSize: 13 }}>93%</div>
+            {(() => {
+              let percent = 0;
+              if (totalDonated !== null && ethPrice !== null) {
+                const donatedUSD = Number(totalDonated) * ethPrice;
+                percent = Math.min(100, (donatedUSD / DONATION_GOAL) * 100);
+              }
+              return (
+                <>
+                  <div style={{ width: `${percent}%`, height: '100%', background: 'linear-gradient(90deg, #00c16e, #2a5bd7)', borderRadius: 8, transition: 'width 0.5s' }}></div>
+                  <div style={{ position: 'absolute', right: 8, top: 0, height: '100%', display: 'flex', alignItems: 'center', color: '#222', fontWeight: 600, fontSize: 13 }}>
+                    {percent.toFixed(0)}%
+                  </div>
+                </>
+              );
+            })()}
           </div>
-          {/* Share/Donate Buttons */}
-          <button style={{ width: '100%', background: '#f7b731', color: '#222', fontWeight: 700, fontSize: 18, border: 'none', borderRadius: 8, padding: '12px 0', marginBottom: 12, cursor: 'pointer', boxShadow: '0 1px 4px #0001' }}>Share</button>
-          {/* Recent Donations */}
-          {recentDonations.length > 0 && (
-            <>
-              <div style={{ color: '#a23', fontWeight: 600, marginBottom: 10 }}>
-                {recentDonations.length} {recentDonations.length === 1 ? 'person' : 'people'} just donated
-              </div>
-              {recentDonations.map((entry, idx) => (
-                <div key={idx} style={{ fontSize: 15, color: '#444', marginBottom: 8 }}>
-                  <b>{entry.donor.slice(0, 6)}...{entry.donor.slice(-4)}</b> ${Number(ethers.formatEther(entry.amount) * ethPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </div>
-              ))}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-                <button style={{ flex: 1, background: '#f5f6fa', border: '1px solid #e6eaf3', borderRadius: 8, padding: '8px 0', fontWeight: 600, color: '#2a5bd7', cursor: 'pointer' }}>See all</button>
-                <button style={{ flex: 1, background: '#f5f6fa', border: '1px solid #e6eaf3', borderRadius: 8, padding: '8px 0', fontWeight: 600, color: '#2a5bd7', cursor: 'pointer' }}>See top</button>
-              </div>
-            </>
-          )}
           {/* User Contribution and ETH Donation Form */}
           <div style={{ margin: '32px 0 0 0', borderTop: '1px solid #eee', paddingTop: 24 }}>
             <div style={{ fontWeight: 600, marginBottom: 8 }}>Your Contribution</div>
@@ -319,6 +335,7 @@ export default function DonatePage() {
             <button onClick={donate} disabled={!account || !amount || !projectId || loading} style={{ width: '100%', background: '#00c16e', color: '#fff', fontWeight: 700, fontSize: 16, border: 'none', borderRadius: 8, padding: '10px 0', marginBottom: 8, cursor: loading ? 'not-allowed' : 'pointer' }}>
               {loading ? "Processing..." : "Donate"}
             </button>
+            <button style={{ width: '100%', background: '#f7b731', color: '#222', fontWeight: 700, fontSize: 18, border: 'none', borderRadius: 8, padding: '12px 0', marginBottom: 12, cursor: 'pointer', boxShadow: '0 1px 4px #0001' }}>Share</button>
             {status && <div style={{ marginTop: 16, color: status.startsWith("Error") ? "#a23" : "#00c16e", fontWeight: 500 }}>{status}</div>}
             <div style={{ marginTop: 16, fontSize: 12, color: '#888' }}>
               You must use MetaMask and be on Base Sepolia.<br />
