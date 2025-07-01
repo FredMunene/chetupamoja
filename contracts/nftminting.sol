@@ -45,6 +45,9 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
     mapping(uint256 => bool) public hasStealthNinja; // projectId => has minted
     mapping(uint256 => uint256) public firstChampionAmount; // projectId => first donation amount
     
+    // NEW: Authorized minter mapping
+    mapping(address => bool) public authorizedMinters;
+    
     // Events
     event NFTMinted(
         address indexed recipient,
@@ -60,13 +63,35 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
         TierCounts tierCounts
     );
     
+    event MinterAuthorized(address indexed minter, bool authorized);
+    
     // Constructor
     constructor(address initialOwner) ERC721("DonationChampion", "DONFT") Ownable(initialOwner) {}
     
-    // Modifier to restrict minting to owner (donation contract)
+    // NEW: Modifier to restrict minting to authorized addresses
     modifier onlyMinter() {
-        require(msg.sender == owner(), "Only minter can mint NFTs");
+        require(authorizedMinters[msg.sender] || msg.sender == owner(), "Not authorized to mint NFTs");
         _;
+    }
+    
+    /**
+     * @notice Authorize/deauthorize an address to mint NFTs
+     * @param minter Address to authorize/deauthorize
+     * @param authorized Whether the address should be authorized
+     */
+    function setAuthorizedMinter(address minter, bool authorized) external onlyOwner {
+        require(minter != address(0), "Invalid minter address");
+        authorizedMinters[minter] = authorized;
+        emit MinterAuthorized(minter, authorized);
+    }
+    
+    /**
+     * @notice Check if an address is authorized to mint
+     * @param minter Address to check
+     * @return Whether the address is authorized
+     */
+    function isAuthorizedMinter(address minter) external view returns (bool) {
+        return authorizedMinters[minter] || minter == owner();
     }
     
     /**
@@ -258,9 +283,6 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
     
     /**
      * @notice Internal function to mint tier-based NFTs
-     * Note: It's safe to increment `tokenIdCounter.current()` without checking 
-     * for overflow because we're not using the value elsewhere.
-     * _tokenIdCounter.increment();
      */
     function _mintTierNFT(
         address recipient,
@@ -347,9 +369,10 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
         if (tier == TierType.SILVER) return "Silver Tier";
         return "Unknown";
     }
+    
     function _exists(uint256 tokenId) internal view returns (bool) {
-    return nftMetadata[tokenId].projectId != 0;
-}
+        return nftMetadata[tokenId].projectId != 0;
+    }
     
     /**
      * @notice Get NFT metadata for a token
@@ -379,7 +402,6 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
     function getProjectNFTStatus(uint256 projectId) external view returns (bool hasFC, bool hasSN) {
         return (hasFirstChampion[projectId], hasStealthNinja[projectId]);
     }
-    
     
     function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage) returns (string memory) {
         return super.tokenURI(tokenId);
