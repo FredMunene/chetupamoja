@@ -245,7 +245,7 @@ export default function DonatePage() {
               textShadow: '0 2px 8px #0006',
               pointerEvents: 'none',
             }}>
-              gofundme.org
+            
               <div style={{ fontSize: 16, fontWeight: 400, marginTop: 8, background: '#fff8', color: '#333', borderRadius: 8, padding: '2px 10px', display: 'inline-block' }}>
                 <span role="img" aria-label="tax">🧾</span> Tax deductible
               </div>
@@ -308,11 +308,119 @@ export default function DonatePage() {
           <div style={{ color: '#555', marginBottom: 8 }}>Provide support for multiple people in need of a little extra help with a single donation.</div>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Quick and direct</div>
           <div style={{ color: '#555', marginBottom: 16 }}>Deliver funds directly to people who are asking for help.</div>
-          <a href="#" style={{ color: '#2a5bd7', fontWeight: 500, textDecoration: 'underline', fontSize: 15 }}>Read more</a>
-          {/* Emoji Row */}
-          <div style={{ fontSize: 24, marginTop: 24, display: 'flex', gap: 8 }}>
-            <span>💚</span><span>🙏</span><span>❤️</span><span>🍎</span><span>🌟</span><span>👏</span><span>✨</span><span>75</span>
-          </div>
+
+          {/* Interactive Meals/Days/Students Sentence */}
+          {(() => {
+            const MEAL_COST = 0.5;
+            const [mealsPerDay, setMealsPerDay] = useState(1);
+            const [days, setDays] = useState(1);
+            const [dropdownOpen, setDropdownOpen] = useState(null); // 'meals' | 'days' | null
+            const students = totalDonatedUSD ? Math.floor(totalDonatedUSD / (MEAL_COST * mealsPerDay * days)) : 0;
+
+            // Dropdown component
+            const Dropdown = ({ value, onChange, options, onClose }) => (
+              <span style={{ position: 'relative', display: 'inline-block' }}>
+                <button
+                  style={{
+                    background: '#e0e7ff', // More prominent background
+                    border: '1px solid #a5b4fc',
+                    borderRadius: 8,
+                    padding: '2px 18px 2px 10px',
+                    fontWeight: 600,
+                    fontSize: 18,
+                    color: '#222',
+                    cursor: 'pointer',
+                    minWidth: 60,
+                  }}
+                  onClick={e => { e.stopPropagation(); onClose && onClose(); }}
+                >
+                  {value} <span style={{ fontSize: 16, marginLeft: 2 }}>▼</span>
+                </button>
+                <div style={{
+                  position: 'absolute',
+                  top: '110%',
+                  left: 0,
+                  background: '#fff',
+                  border: '1px solid #e6eaf3',
+                  borderRadius: 8,
+                  boxShadow: '0 2px 8px #0001',
+                  zIndex: 10,
+                  minWidth: 60,
+                }}>
+                  {options.map(opt => (
+                    <div
+                      key={opt}
+                      style={{ padding: '6px 12px', cursor: 'pointer', fontWeight: 500, color: '#222', background: value === opt ? '#f0f4ff' : '#fff' }}
+                      onClick={() => { onChange(opt); setDropdownOpen(null); }}
+                    >
+                      {opt}
+                    </div>
+                  ))}
+                </div>
+              </span>
+            );
+
+            // Inline style for the changeable values
+            const inlineBold = {
+              fontWeight: 700,
+              color: '#0a1150',
+              cursor: 'pointer',
+              background: '#e0e7ff', // More prominent background
+              border: '1px solid #a5b4fc',
+              borderRadius: 8,
+              padding: '2px 10px',
+              margin: '0 4px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              transition: 'background 0.2s',
+            };
+            const sentenceStyle = { fontSize: 24, fontWeight: 700, color: '#0a1150', margin: '24px 0 16px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap' };
+
+            return (
+              <div style={sentenceStyle}>
+                With the total donated, you can provide
+                <span
+                  style={inlineBold}
+                  onClick={() => setDropdownOpen(dropdownOpen === 'meals' ? null : 'meals')}
+                >
+                  {dropdownOpen === 'meals' ? (
+                    <Dropdown
+                      value={mealsPerDay}
+                      onChange={setMealsPerDay}
+                      options={[1, 2]}
+                      onClose={() => setDropdownOpen(null)}
+                    />
+                  ) : (
+                    <>
+                      {mealsPerDay} meal{mealsPerDay > 1 ? 's' : ''} <span style={{ fontSize: 16, marginLeft: 2 }}>▼</span>
+                    </>
+                  )}
+                </span>
+                per day for
+                <span
+                  style={inlineBold}
+                  onClick={() => setDropdownOpen(dropdownOpen === 'days' ? null : 'days')}
+                >
+                  {dropdownOpen === 'days' ? (
+                    <Dropdown
+                      value={days}
+                      onChange={setDays}
+                      options={[1, 2]}
+                      onClose={() => setDropdownOpen(null)}
+                    />
+                  ) : (
+                    <>
+                      {days} day{days > 1 ? 's' : ''} <span style={{ fontSize: 16, marginLeft: 2 }}>▼</span>
+                    </>
+                  )}
+                </span>
+                to
+                <span style={{ fontWeight: 700, color: '#0a1150', margin: '0 4px' }}>{students}</span>
+                students.
+              </div>
+            );
+          })()}
+
         </div>
         {/* Sidebar */}
         <div className="donate-sidebar" style={{
