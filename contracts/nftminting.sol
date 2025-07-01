@@ -24,6 +24,7 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
     struct NFTMetadata {
         uint256 projectId;
         string projectName;
+        string image;
         TierType tier;
         uint256 rankNumber;
         uint256 donationAmount;
@@ -99,12 +100,14 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
      * @param recipient Address to receive the NFT
      * @param projectId Project ID
      * @param projectName Name of the project
+     * @param image Image URL of the project
      * @param donationAmount Amount donated
      */
     function mintFirstChampion(
         address recipient,
         uint256 projectId,
         string memory projectName,
+        string memory image,
         uint256 donationAmount
     ) external onlyMinter nonReentrant returns (uint256 tokenId) {
         require(!hasFirstChampion[projectId], "First Champion already minted for this project");
@@ -120,6 +123,7 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
         nftMetadata[tokenId] = NFTMetadata({
             projectId: projectId,
             projectName: projectName,
+            image: image,
             tier: TierType.FIRST_CHAMPION,
             rankNumber: 1,
             donationAmount: donationAmount,
@@ -141,12 +145,14 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
      * @param recipient Address to receive the NFT
      * @param projectId Project ID
      * @param projectName Name of the project
+     * @param image Image URL of the project
      * @param donationAmount Amount donated
      */
     function mintStealthNinja(
         address recipient,
         uint256 projectId,
         string memory projectName,
+        string memory image,
         uint256 donationAmount
     ) external onlyMinter nonReentrant returns (uint256 tokenId) {
         require(recipient != address(0), "Invalid recipient address");
@@ -164,6 +170,7 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
         nftMetadata[tokenId] = NFTMetadata({
             projectId: projectId,
             projectName: projectName,
+            image: image,
             tier: TierType.STEALTH_NINJA,
             rankNumber: 1,
             donationAmount: donationAmount,
@@ -183,12 +190,14 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
      * @notice End campaign and mint tier-based NFTs using proportional scaling
      * @param projectId Project ID
      * @param projectName Name of the project
+     * @param image Image URL of the project
      * @param sortedDonors Array of donor addresses sorted by donation amount (highest first)
      * @param sortedAmounts Array of donation amounts sorted (highest first)
      */
     function endCampaignAndMintTiers(
         uint256 projectId,
         string memory projectName,
+        string memory image,
         address[] calldata sortedDonors,
         uint256[] calldata sortedAmounts
     ) external onlyMinter nonReentrant {
@@ -206,6 +215,7 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
                 sortedDonors[currentIndex],
                 projectId,
                 projectName,
+                image,
                 TierType.DIAMOND,
                 currentIndex + 1,
                 sortedAmounts[currentIndex],
@@ -220,6 +230,7 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
                 sortedDonors[currentIndex],
                 projectId,
                 projectName,
+                image,
                 TierType.PLATINUM,
                 currentIndex + 1,
                 sortedAmounts[currentIndex],
@@ -234,6 +245,7 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
                 sortedDonors[currentIndex],
                 projectId,
                 projectName,
+                image,
                 TierType.GOLD,
                 currentIndex + 1,
                 sortedAmounts[currentIndex],
@@ -248,6 +260,7 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
                 sortedDonors[currentIndex],
                 projectId,
                 projectName,
+                image,
                 TierType.SILVER,
                 currentIndex + 1,
                 sortedAmounts[currentIndex],
@@ -288,6 +301,7 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
         address recipient,
         uint256 projectId,
         string memory projectName,
+        string memory image,
         TierType tier,
         uint256 rankNumber,
         uint256 donationAmount,
@@ -303,6 +317,7 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
         nftMetadata[tokenId] = NFTMetadata({
             projectId: projectId,
             projectName: projectName,
+            image: image,
             tier: tier,
             rankNumber: rankNumber,
             donationAmount: donationAmount,
@@ -340,6 +355,7 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
         string memory json = string(abi.encodePacked(
             '{"name":"', metadata.projectName, " - ", tierName, '",',
             '"description":"', description, '",',
+            '"image":"', metadata.image, '",',
             '"attributes":[',
                 '{"trait_type":"Project","value":"', metadata.projectName, '"},',
                 '{"trait_type":"Tier","value":"', tierName, '"},',
