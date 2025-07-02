@@ -18,6 +18,11 @@ const CONTRACT_ADDRESS = "0x6d5fdc15dc47254f266a90772bd8a12f849faf12";
 const BASE_SEPOLIA_CHAIN_ID = "0x14A34"; // 927,076 decimal
 const DONATION_GOAL = 3000; // USD
 
+// Font size variables
+const FONT_LARGE = 28;
+const FONT_MEDIUM = 18;
+const FONT_SMALL = 15;
+
 export default function DonatePage() {
   const [account, setAccount] = useState(null);
   const [amount, setAmount] = useState("");
@@ -228,7 +233,7 @@ export default function DonatePage() {
         }}>
         {/* Main Content */}
         <div className="donate-main" style={{ flex: 2, minWidth: 350 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 24, color: '#111' }}>{CAMPAIGN.title}</h1>
+          <h1 style={{ fontSize: FONT_LARGE, fontWeight: 800, marginBottom: 24, color: '#111' }}>{CAMPAIGN.title}</h1>
           {/* Campaign Image Card */}
           <div style={{
             background: '#fff',
@@ -323,13 +328,13 @@ export default function DonatePage() {
             </div>
           )}
           {/* Description */}
-          <div style={{ fontSize: 17, color: '#111', marginBottom: 16 }}>{CAMPAIGN.description}</div>
-          <ul style={{ fontSize: 16, color: '#111', marginBottom: 16, paddingLeft: 20 }}>
+          <div style={{ fontSize: FONT_MEDIUM, color: '#111', marginBottom: 16 }}>{CAMPAIGN.description}</div>
+          <ul style={{ fontSize: FONT_SMALL, color: '#111', marginBottom: 16, paddingLeft: 20 }}>
             {CAMPAIGN.details.map((d, i) => (
               <li key={i}>{d}</li>
             ))}
           </ul>
-          <div style={{ fontWeight: 700, marginBottom: 16, color: '#ff9800', fontSize: 18 }}>{CAMPAIGN.tagline}</div>
+          <div style={{ fontWeight: 700, marginBottom: 16, color: '#ff9800', fontSize: FONT_MEDIUM }}>{CAMPAIGN.tagline}</div>
 
           {/* Interactive Meals/Days/Students Sentence */}
           {(() => {
@@ -396,7 +401,7 @@ export default function DonatePage() {
               alignItems: 'center',
               transition: 'background 0.2s',
             };
-            const sentenceStyle = { fontSize: 22, fontWeight: 700, color: '#111', margin: '24px 0 16px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap' };
+            const sentenceStyle = { fontSize: FONT_MEDIUM, fontWeight: 700, color: '#111', margin: '24px 0 16px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap' };
 
             return (
               <div style={sentenceStyle}>
@@ -456,17 +461,17 @@ export default function DonatePage() {
           top: 40,
         }}>
           {/* Progress and Stats */}
-          <div style={{ fontSize: 26, fontWeight: 800, marginBottom: 8, color: '#111' }}>
+          <div style={{ fontSize: FONT_LARGE, fontWeight: 800, marginBottom: 8, color: '#111' }}>
             {totalDonated === null || ethPrice === null
               ? 'Loading...'
               : `$${Number(totalDonated * ethPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`}
             <span style={{ fontSize: 15, color: '#ff9800', fontWeight: 700 }}> raised</span>
           </div>
-          <div style={{ color: '#111', fontSize: 15, marginBottom: 12 }}>
+          <div style={{ color: '#111', fontSize: FONT_SMALL, marginBottom: 12 }}>
             $3,000 goal · {numDeposits === null ? 'Loading...' : `${numDeposits} donation${numDeposits === 1 ? '' : 's'}`}
           </div>
           {/* Progress Bar */}
-          <div style={{ height: 16, background: '#eee', borderRadius: 8, marginBottom: 16, position: 'relative' }}>
+          <div style={{ height: 18, background: '#eee', borderRadius: 8, marginBottom: 16, position: 'relative' }}>
             {(() => {
               let percent = 0;
               if (totalDonated !== null && ethPrice !== null) {
@@ -485,17 +490,17 @@ export default function DonatePage() {
           </div>
           {/* User Contribution and ETH Donation Form */}
           <div style={{ margin: '32px 0 0 0', borderTop: '1px solid #eee', paddingTop: 24 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Your Contribution</div>
+            <div style={{ fontWeight: 600, marginBottom: 8, fontSize: FONT_MEDIUM }}>Your Contribution</div>
             {account && userContribution !== null ? (
-              <div style={{ color: '#ff9800', fontWeight: 700, marginBottom: 8 }}>{userContribution} ETH</div>
+              <div style={{ color: '#ff9800', fontWeight: 700, marginBottom: 8, fontSize: FONT_MEDIUM }}>{userContribution} ETH</div>
             ) : (
-              <div style={{ color: '#888', marginBottom: 8 }}>Connect wallet to see</div>
+              <div style={{ color: '#888', marginBottom: 8, fontSize: FONT_SMALL }}>Connect wallet to see</div>
             )}
             {!account ? (
-              <button onClick={connectWallet} style={{ width: '100%', background: '#ff9800', color: '#fff', fontWeight: 700, fontSize: 16, border: 'none', borderRadius: 8, padding: '10px 0', marginBottom: 12, cursor: 'pointer' }}>Connect Wallet</button>
+              <button onClick={connectWallet} style={{ width: '100%', background: '#ff9800', color: '#fff', fontWeight: 700, fontSize: FONT_MEDIUM, border: 'none', borderRadius: 8, padding: '16px 0', marginBottom: 16, cursor: 'pointer' }}>Connect Wallet</button>
             ) : null}
             <div style={{ margin: '16px 0', display: 'flex', gap: 12 }}>
-              <label style={{ flex: 1, color: '#111', fontWeight: 600, fontSize: 15 }}>
+              <label style={{ flex: 1, color: '#111', fontWeight: 600, fontSize: FONT_SMALL }}>
                 Amount (ETH):
                 <input
                   name="ethInput"
@@ -504,11 +509,11 @@ export default function DonatePage() {
                   step="0.0001"
                   value={inputEth}
                   onChange={e => setInputEth(e.target.value)}
-                  style={{ marginLeft: 8, padding: 4, borderRadius: 6, border: '1px solid #ff9800', width: '100%', color: '#111', background: '#fff', fontSize: 15 }}
+                  style={{ marginLeft: 8, padding: 8, borderRadius: 6, border: '1px solid #ff9800', width: '100%', color: '#111', background: '#fff', fontSize: FONT_MEDIUM }}
                   disabled={loading}
                 />
               </label>
-              <label style={{ flex: 1, color: '#111', fontWeight: 600, fontSize: 15 }}>
+              <label style={{ flex: 1, color: '#111', fontWeight: 600, fontSize: FONT_SMALL }}>
                 Amount (USD):
                 <input
                   name="usdInput"
@@ -517,17 +522,17 @@ export default function DonatePage() {
                   step="0.01"
                   value={inputUsd}
                   onChange={e => setInputUsd(e.target.value)}
-                  style={{ marginLeft: 8, padding: 4, borderRadius: 6, border: '1px solid #ff9800', width: '100%', color: '#111', background: '#fff', fontSize: 15 }}
+                  style={{ marginLeft: 8, padding: 8, borderRadius: 6, border: '1px solid #ff9800', width: '100%', color: '#111', background: '#fff', fontSize: FONT_MEDIUM }}
                   disabled={loading}
                 />
               </label>
             </div>
-            <button onClick={donate} disabled={!account || !inputEth || !projectId || loading} style={{ width: '100%', background: '#ff9800', color: '#fff', fontWeight: 800, fontSize: 16, border: 'none', borderRadius: 8, padding: '10px 0', marginBottom: 8, cursor: loading ? 'not-allowed' : 'pointer' }}>
+            <button onClick={donate} disabled={!account || !inputEth || !projectId || loading} style={{ width: '100%', background: '#ff9800', color: '#fff', fontWeight: 800, fontSize: FONT_MEDIUM, border: 'none', borderRadius: 8, padding: '18px 0', marginBottom: 12, cursor: loading ? 'not-allowed' : 'pointer' }}>
               {loading ? "Processing..." : "Donate"}
             </button>
-            <button style={{ width: '100%', background: '#fff', color: '#ff9800', fontWeight: 700, fontSize: 18, border: '2px solid #ff9800', borderRadius: 8, padding: '12px 0', marginBottom: 12, cursor: 'pointer', boxShadow: '0 1px 4px #0001' }}>Share</button>
-            {status && <div style={{ marginTop: 16, color: status.startsWith("Error") ? "#a23" : "#ff9800", fontWeight: 500 }}>{status}</div>}
-            <div style={{ marginTop: 16, fontSize: 13, color: '#111', lineHeight: 1.6 }}>
+            <button style={{ width: '100%', background: '#fff', color: '#ff9800', fontWeight: 700, fontSize: FONT_MEDIUM, border: '2px solid #ff9800', borderRadius: 8, padding: '18px 0', marginBottom: 16, cursor: 'pointer', boxShadow: '0 1px 4px #0001' }}>Share</button>
+            {status && <div style={{ marginTop: 16, color: status.startsWith("Error") ? "#a23" : "#ff9800", fontWeight: 500, fontSize: FONT_SMALL }}>{status}</div>}
+            <div style={{ marginTop: 16, fontSize: FONT_SMALL, color: '#111', lineHeight: 1.6 }}>
               <b>Note:</b> Please use the <span style={{ color: '#ff9800', fontWeight: 700 }}>Base</span> network and send <span style={{ color: '#ff9800', fontWeight: 700 }}>ETH</span> for your donation.<br />
               Make sure your wallet is connected to Base.
             </div>
