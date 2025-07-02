@@ -105,10 +105,7 @@ function App() {
 
   async function fetchEthPrice() {
     try {
-      // Use public CORS proxy for development to bypass CORS
-      const proxyUrl = "https://corsproxy.io/?";
-      const coingeckoUrl = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd";
-      const res = await fetch(proxyUrl + encodeURIComponent(coingeckoUrl));
+      const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
       const data = await res.json();
       setEthPrice(data.ethereum.usd);
     } catch {
@@ -122,10 +119,7 @@ function App() {
     // Set default amount to $0.5 in ETH after fetching price
     async function setDefaultAmount() {
       try {
-        // Use public CORS proxy for development to bypass CORS
-        const proxyUrl = "https://corsproxy.io/?";
-        const coingeckoUrl = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd";
-        const res = await fetch(proxyUrl + encodeURIComponent(coingeckoUrl));
+        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
         const data = await res.json();
         const ethPrice = data.ethereum.usd || 2500;
         if (ethPrice) {
@@ -177,6 +171,29 @@ function App() {
       setInputEth((parseFloat(inputUsd) / ethPrice).toFixed(6));
     }
   }, [inputEth, inputUsd, ethPrice]);
+
+  useEffect(() => {
+    async function fetchNumDeposits() {
+      if (!projectId) {
+        setNumDeposits(null);
+        return;
+      }
+      try {
+        // Use the user's wallet if available, otherwise fallback to a public provider
+        const provider = window.ethereum
+          ? new ethers.BrowserProvider(window.ethereum)
+          : ethers.getDefaultProvider(); // fallback for read-only
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, provider);
+        const depositIds = await contract.getProjectDeposits(projectId);
+        setNumDeposits(depositIds.length);
+      } catch (err) {
+        setNumDeposits(null);
+        // Optionally log the error for debugging
+        // console.error("Failed to fetch number of deposits:", err);
+      }
+    }
+    fetchNumDeposits();
+  }, [projectId, totalDonated]);
 
   async function donate() {
     setStatus("");
@@ -245,6 +262,20 @@ function App() {
     });
     setFormSubmitted(false);
   };
+
+  function handleShare() {
+    const shareUrl = window.location.href;
+    if (navigator.share) {
+      navigator.share({
+        title: "Support STEM Showcases",
+        text: "Join me in supporting STEM Showcases! Donate now.",
+        url: shareUrl,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(shareUrl);
+      alert("Link copied to clipboard!");
+    }
+  }
 
   if (currentPage === 'organization') {
     return (
@@ -933,8 +964,23 @@ function App() {
                     </button>
 
                     {/* Share Button */}
-                    <button className="w-full border-2 border-orange-500 text-orange-500 font-bold py-4 rounded-xl hover:bg-orange-50 transition-colors">
-                      Share Campaign
+                    <button
+                      onClick={handleShare}
+                      style={{
+                        width: '100%',
+                        background: '#fff',
+                        color: '#ff9800',
+                        fontWeight: 700,
+                        fontSize: FONT_MEDIUM,
+                        border: '2px solid #ff9800',
+                        borderRadius: 8,
+                        padding: '18px 0',
+                        marginBottom: 16,
+                        cursor: 'pointer',
+                        boxShadow: '0 1px 4px #0001'
+                      }}
+                    >
+                      Share
                     </button>
                   </div>
                 )}
