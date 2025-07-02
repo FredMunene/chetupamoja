@@ -4,13 +4,14 @@ import { ethers } from "ethers";
 import ProjectDonationContractWithNFT_metadata from "./abi/ProjectDonationContractWithNFT_metadata.json";
 
 const CAMPAIGN = {
-  title: "Tech Challenge Kenya 2025",
+  title: "Support STEM Showcases in Kisumu & Nakuru",
   description:
-    "Showcases in Kisumu (5th/6th July) and Nakuru (12th/13th July), where 6000 students and advisers from Kisumu and Nakuru counties will gather to showcase their innovative STEM projects. For just $0.50 per person, you can help us provide a snack bag for: 5000 students and 1000 advisers (Total: 6000 people).",
+    "Support STEM Showcases in Kisumu (5–6 July) and Nakuru (12–13 July), where 6,000 students and advisers will present innovative projects. For just $0.50 per person, you can provide a snack bag and keep them energized.",
   details: [
-    "500/- feeds 25 students",
-    "100/- feeds 5 students",
+    "500 KES feeds 25 students",
+    "100 KES feeds 5 students",
   ],
+  tagline: "Donate once, help many — quick, direct, and impactful.",
 };
 
 const CONTRACT_ADDRESS = "0x6d5fdc15dc47254f266a90772bd8a12f849faf12";
@@ -304,10 +305,7 @@ export default function DonatePage() {
               <li key={i}>{d}</li>
             ))}
           </ul>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Donate once, help many</div>
-          <div style={{ color: '#555', marginBottom: 8 }}>Provide support for multiple people in need of a little extra help with a single donation.</div>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Quick and direct</div>
-          <div style={{ color: '#555', marginBottom: 16 }}>Deliver funds directly to people who are asking for help.</div>
+          <div style={{ fontWeight: 600, marginBottom: 16, color: '#0a1150', fontSize: 18 }}>{CAMPAIGN.tagline}</div>
 
           {/* Interactive Meals/Days/Students Sentence */}
           {(() => {
