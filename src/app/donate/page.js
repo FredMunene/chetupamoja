@@ -30,6 +30,8 @@ export default function DonatePage() {
   const [recentDonations, setRecentDonations] = useState([]);
   const [numDeposits, setNumDeposits] = useState(null);
   const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [inputEth, setInputEth] = useState("");
+  const [inputUsd, setInputUsd] = useState("");
 
   const abi = ProjectDonationContractWithNFT_metadata.output.abi;
 
@@ -159,6 +161,28 @@ export default function DonatePage() {
     fetchNumDeposits();
   }, [projectId, totalDonated]);
 
+  // Sync ETH and USD input fields
+  useEffect(() => {
+    if (!ethPrice) return;
+    // If ETH input changes, update USD
+    if (inputEth !== "" && document.activeElement && document.activeElement.name === "ethInput") {
+      setInputUsd((parseFloat(inputEth) * ethPrice).toFixed(2));
+    }
+    // If USD input changes, update ETH
+    if (inputUsd !== "" && document.activeElement && document.activeElement.name === "usdInput") {
+      setInputEth((parseFloat(inputUsd) / ethPrice).toFixed(6));
+    }
+  }, [inputEth, inputUsd, ethPrice]);
+
+  // Set default input values when ethPrice loads
+  useEffect(() => {
+    if (ethPrice && inputEth === "" && inputUsd === "") {
+      const ethAmount = (0.5 / ethPrice).toFixed(6);
+      setInputEth(ethAmount);
+      setInputUsd((0.5).toFixed(2));
+    }
+  }, [ethPrice]);
+
   async function donate() {
     setStatus("");
     setLoading(true);
@@ -172,11 +196,12 @@ export default function DonatePage() {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer);
       const tx = await contract.depositETH(
         projectId,
-        { value: ethers.parseEther(amount) }
+        { value: ethers.parseEther(inputEth) }
       );
       await tx.wait();
       setStatus("Donation successful! Thank you.");
-      setAmount("");
+      setInputEth("");
+      setInputUsd("");
       setProjectId("");
       fetchTotalDonated(); // Refresh total after donation
       fetchEthPrice(); // Refresh price in case
@@ -190,7 +215,7 @@ export default function DonatePage() {
   const amountUSD = amount && ethPrice ? (parseFloat(amount) * ethPrice).toFixed(2) : null;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#fafbfc', padding: '40px 0' }}>
+    <div style={{ minHeight: '100vh', background: '#fff', padding: '40px 0' }}>
       <div
         className="donate-flex-container"
         style={{
@@ -203,10 +228,10 @@ export default function DonatePage() {
         }}>
         {/* Main Content */}
         <div className="donate-main" style={{ flex: 2, minWidth: 350 }}>
-          <h1 style={{ fontSize: 36, fontWeight: 700, marginBottom: 24 }}>{CAMPAIGN.title}</h1>
+          <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 24, color: '#111' }}>{CAMPAIGN.title}</h1>
           {/* Campaign Image Card */}
           <div style={{
-            background: '#bfc8e6',
+            background: '#fff',
             borderRadius: 18,
             overflow: 'hidden',
             marginBottom: 24,
@@ -234,20 +259,19 @@ export default function DonatePage() {
               left: 0,
               width: '100%',
               height: '100%',
-              background: 'rgba(100,120,200,0.06)',
+              background: 'rgba(0,0,0,0.04)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'flex-end',
               alignItems: 'flex-start',
               padding: 24,
-              color: '#fff',
+              color: '#111',
               fontWeight: 700,
-              fontSize: 24,
-              textShadow: '0 2px 8px #0006',
+              fontSize: 20,
+              textShadow: '0 2px 8px #fff6',
               pointerEvents: 'none',
             }}>
-            
-              <div style={{ fontSize: 16, fontWeight: 400, marginTop: 8, background: '#fff8', color: '#333', borderRadius: 8, padding: '2px 10px', display: 'inline-block' }}>
+              <div style={{ fontSize: 15, fontWeight: 400, marginTop: 8, background: '#fff', color: '#111', borderRadius: 8, padding: '2px 10px', display: 'inline-block', opacity: 0.9 }}>
                 <span role="img" aria-label="tax">🧾</span> Tax deductible
               </div>
             </div>
@@ -299,13 +323,13 @@ export default function DonatePage() {
             </div>
           )}
           {/* Description */}
-          <div style={{ fontSize: 18, color: '#222', marginBottom: 16 }}>{CAMPAIGN.description}</div>
-          <ul style={{ fontSize: 16, color: '#444', marginBottom: 16, paddingLeft: 20 }}>
+          <div style={{ fontSize: 17, color: '#111', marginBottom: 16 }}>{CAMPAIGN.description}</div>
+          <ul style={{ fontSize: 16, color: '#111', marginBottom: 16, paddingLeft: 20 }}>
             {CAMPAIGN.details.map((d, i) => (
               <li key={i}>{d}</li>
             ))}
           </ul>
-          <div style={{ fontWeight: 600, marginBottom: 16, color: '#0a1150', fontSize: 18 }}>{CAMPAIGN.tagline}</div>
+          <div style={{ fontWeight: 700, marginBottom: 16, color: '#ff9800', fontSize: 18 }}>{CAMPAIGN.tagline}</div>
 
           {/* Interactive Meals/Days/Students Sentence */}
           {(() => {
@@ -313,20 +337,20 @@ export default function DonatePage() {
             const [mealsPerDay, setMealsPerDay] = useState(1);
             const [days, setDays] = useState(1);
             const [dropdownOpen, setDropdownOpen] = useState(null); // 'meals' | 'days' | null
-            const students = totalDonatedUSD ? Math.floor(totalDonatedUSD / (MEAL_COST * mealsPerDay * days)) : 0;
+            const students = inputUsd ? Math.floor(parseFloat(inputUsd) / (MEAL_COST * mealsPerDay * days)) : 0;
 
             // Dropdown component
             const Dropdown = ({ value, onChange, options, onClose }) => (
               <span style={{ position: 'relative', display: 'inline-block' }}>
                 <button
                   style={{
-                    background: '#e0e7ff', // More prominent background
-                    border: '1px solid #a5b4fc',
+                    background: '#fff',
+                    border: '1px solid #ff9800',
                     borderRadius: 8,
                     padding: '2px 18px 2px 10px',
                     fontWeight: 600,
                     fontSize: 18,
-                    color: '#222',
+                    color: '#111',
                     cursor: 'pointer',
                     minWidth: 60,
                   }}
@@ -348,7 +372,7 @@ export default function DonatePage() {
                   {options.map(opt => (
                     <div
                       key={opt}
-                      style={{ padding: '6px 12px', cursor: 'pointer', fontWeight: 500, color: '#222', background: value === opt ? '#f0f4ff' : '#fff' }}
+                      style={{ padding: '6px 12px', cursor: 'pointer', fontWeight: 500, color: '#111', background: value === opt ? '#f0f4ff' : '#fff' }}
                       onClick={() => { onChange(opt); setDropdownOpen(null); }}
                     >
                       {opt}
@@ -361,10 +385,10 @@ export default function DonatePage() {
             // Inline style for the changeable values
             const inlineBold = {
               fontWeight: 700,
-              color: '#0a1150',
+              color: '#ff9800',
               cursor: 'pointer',
-              background: '#e0e7ff', // More prominent background
-              border: '1px solid #a5b4fc',
+              background: '#fff',
+              border: '1px solid #ff9800',
               borderRadius: 8,
               padding: '2px 10px',
               margin: '0 4px',
@@ -372,7 +396,7 @@ export default function DonatePage() {
               alignItems: 'center',
               transition: 'background 0.2s',
             };
-            const sentenceStyle = { fontSize: 24, fontWeight: 700, color: '#0a1150', margin: '24px 0 16px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap' };
+            const sentenceStyle = { fontSize: 22, fontWeight: 700, color: '#111', margin: '24px 0 16px 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap' };
 
             return (
               <div style={sentenceStyle}>
@@ -413,7 +437,7 @@ export default function DonatePage() {
                   )}
                 </span>
                 to
-                <span style={{ fontWeight: 700, color: '#0a1150', margin: '0 4px' }}>{students}</span>
+                <span style={{ fontWeight: 700, color: '#ff9800', margin: '0 4px' }}>{students}</span>
                 students.
               </div>
             );
@@ -432,17 +456,17 @@ export default function DonatePage() {
           top: 40,
         }}>
           {/* Progress and Stats */}
-          <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
+          <div style={{ fontSize: 26, fontWeight: 800, marginBottom: 8, color: '#111' }}>
             {totalDonated === null || ethPrice === null
               ? 'Loading...'
               : `$${Number(totalDonated * ethPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`}
-            <span style={{ fontSize: 16, color: '#888', fontWeight: 400 }}> raised</span>
+            <span style={{ fontSize: 15, color: '#ff9800', fontWeight: 700 }}> raised</span>
           </div>
-          <div style={{ color: '#888', fontSize: 15, marginBottom: 12 }}>
+          <div style={{ color: '#111', fontSize: 15, marginBottom: 12 }}>
             $3,000 goal · {numDeposits === null ? 'Loading...' : `${numDeposits} donation${numDeposits === 1 ? '' : 's'}`}
           </div>
           {/* Progress Bar */}
-          <div style={{ height: 16, background: '#e6eaf3', borderRadius: 8, marginBottom: 16, position: 'relative' }}>
+          <div style={{ height: 16, background: '#eee', borderRadius: 8, marginBottom: 16, position: 'relative' }}>
             {(() => {
               let percent = 0;
               if (totalDonated !== null && ethPrice !== null) {
@@ -451,8 +475,8 @@ export default function DonatePage() {
               }
               return (
                 <>
-                  <div style={{ width: `${percent}%`, height: '100%', background: 'linear-gradient(90deg, #00c16e, #2a5bd7)', borderRadius: 8, transition: 'width 0.5s' }}></div>
-                  <div style={{ position: 'absolute', right: 8, top: 0, height: '100%', display: 'flex', alignItems: 'center', color: '#222', fontWeight: 600, fontSize: 13 }}>
+                  <div style={{ width: `${percent}%`, height: '100%', background: '#ff9800', borderRadius: 8, transition: 'width 0.5s' }}></div>
+                  <div style={{ position: 'absolute', right: 8, top: 0, height: '100%', display: 'flex', alignItems: 'center', color: '#111', fontWeight: 700, fontSize: 13 }}>
                     {percent.toFixed(0)}%
                   </div>
                 </>
@@ -463,39 +487,48 @@ export default function DonatePage() {
           <div style={{ margin: '32px 0 0 0', borderTop: '1px solid #eee', paddingTop: 24 }}>
             <div style={{ fontWeight: 600, marginBottom: 8 }}>Your Contribution</div>
             {account && userContribution !== null ? (
-              <div style={{ color: '#007bff', fontWeight: 500, marginBottom: 8 }}>{userContribution} ETH</div>
+              <div style={{ color: '#ff9800', fontWeight: 700, marginBottom: 8 }}>{userContribution} ETH</div>
             ) : (
               <div style={{ color: '#888', marginBottom: 8 }}>Connect wallet to see</div>
             )}
             {!account ? (
-              <button onClick={connectWallet} style={{ width: '100%', background: '#2a5bd7', color: '#fff', fontWeight: 700, fontSize: 16, border: 'none', borderRadius: 8, padding: '10px 0', marginBottom: 12, cursor: 'pointer' }}>Connect Wallet</button>
+              <button onClick={connectWallet} style={{ width: '100%', background: '#ff9800', color: '#fff', fontWeight: 700, fontSize: 16, border: 'none', borderRadius: 8, padding: '10px 0', marginBottom: 12, cursor: 'pointer' }}>Connect Wallet</button>
             ) : null}
-            <div style={{ margin: '16px 0' }}>
-              <label>
+            <div style={{ margin: '16px 0', display: 'flex', gap: 12 }}>
+              <label style={{ flex: 1, color: '#111', fontWeight: 600, fontSize: 15 }}>
                 Amount (ETH):
                 <input
+                  name="ethInput"
                   type="number"
                   min="0.0001"
                   step="0.0001"
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                  style={{ marginLeft: 8, padding: 4, borderRadius: 6, border: '1px solid #e6eaf3', width: 120 }}
+                  value={inputEth}
+                  onChange={e => setInputEth(e.target.value)}
+                  style={{ marginLeft: 8, padding: 4, borderRadius: 6, border: '1px solid #ff9800', width: '100%', color: '#111', background: '#fff', fontSize: 15 }}
                   disabled={loading}
                 />
-                {amountUSD && (
-                  <span style={{ marginLeft: 12, color: '#888' }}>
-                    (~${amountUSD} USD)
-                  </span>
-                )}
+              </label>
+              <label style={{ flex: 1, color: '#111', fontWeight: 600, fontSize: 15 }}>
+                Amount (USD):
+                <input
+                  name="usdInput"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={inputUsd}
+                  onChange={e => setInputUsd(e.target.value)}
+                  style={{ marginLeft: 8, padding: 4, borderRadius: 6, border: '1px solid #ff9800', width: '100%', color: '#111', background: '#fff', fontSize: 15 }}
+                  disabled={loading}
+                />
               </label>
             </div>
-            <button onClick={donate} disabled={!account || !amount || !projectId || loading} style={{ width: '100%', background: '#00c16e', color: '#fff', fontWeight: 700, fontSize: 16, border: 'none', borderRadius: 8, padding: '10px 0', marginBottom: 8, cursor: loading ? 'not-allowed' : 'pointer' }}>
+            <button onClick={donate} disabled={!account || !inputEth || !projectId || loading} style={{ width: '100%', background: '#ff9800', color: '#fff', fontWeight: 800, fontSize: 16, border: 'none', borderRadius: 8, padding: '10px 0', marginBottom: 8, cursor: loading ? 'not-allowed' : 'pointer' }}>
               {loading ? "Processing..." : "Donate"}
             </button>
-            <button style={{ width: '100%', background: '#f7b731', color: '#222', fontWeight: 700, fontSize: 18, border: 'none', borderRadius: 8, padding: '12px 0', marginBottom: 12, cursor: 'pointer', boxShadow: '0 1px 4px #0001' }}>Share</button>
-            {status && <div style={{ marginTop: 16, color: status.startsWith("Error") ? "#a23" : "#00c16e", fontWeight: 500 }}>{status}</div>}
-            <div style={{ marginTop: 16, fontSize: 13, color: '#888', lineHeight: 1.6 }}>
-              <b>Note:</b> Please use the <span style={{ color: '#2a5bd7', fontWeight: 600 }}>Base</span> network and send <span style={{ color: '#2a5bd7', fontWeight: 600 }}>ETH</span> for your donation.<br />
+            <button style={{ width: '100%', background: '#fff', color: '#ff9800', fontWeight: 700, fontSize: 18, border: '2px solid #ff9800', borderRadius: 8, padding: '12px 0', marginBottom: 12, cursor: 'pointer', boxShadow: '0 1px 4px #0001' }}>Share</button>
+            {status && <div style={{ marginTop: 16, color: status.startsWith("Error") ? "#a23" : "#ff9800", fontWeight: 500 }}>{status}</div>}
+            <div style={{ marginTop: 16, fontSize: 13, color: '#111', lineHeight: 1.6 }}>
+              <b>Note:</b> Please use the <span style={{ color: '#ff9800', fontWeight: 700 }}>Base</span> network and send <span style={{ color: '#ff9800', fontWeight: 700 }}>ETH</span> for your donation.<br />
               Make sure your wallet is connected to Base.
             </div>
           </div>
