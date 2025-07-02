@@ -78,16 +78,16 @@ export default function Home() {
           <div className="grid md:grid-cols-3 gap-12">
             <div className="text-center space-y-6">
               <h3 className="text-xl font-medium">Give</h3>
-              <li>• Donate crypto instantly</li>
-                <li>• Minimal fees</li>
-                <li>• Global reach</li>
+              <li> Donate crypto instantly</li>
+                <li> Minimal fees</li>
+                <li> Global reach</li>
             </div>
 
             <div className="text-center space-y-6">
               <h3 className="text-xl font-medium">Get</h3>
-                <li>• NFT donation badges</li>
-                <li>• Impact metrics</li>
-                <li>• Community recognition</li>
+                <li> NFT donation badges</li>
+                <li> Impact metrics</li>
+                <li> Community recognition</li>
             </div>
           </div>
 
