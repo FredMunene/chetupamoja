@@ -7,4 +7,10 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  server: {
+    host: '0.0.0.0', // important: allows external connections
+    port: 3000,      // or any port you want (Render usually uses 10000+ internally)
+  },
+  
+  
 });
