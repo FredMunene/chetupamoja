@@ -9,6 +9,6 @@ console.log('Thirdweb clientId:', clientId); // Debug: print the clientId
 const secretKey = import.meta.env.VITE_TEMPLATE_SECRET_KEY;
 
 export const client = createThirdwebClient({
-    clientId: clientId,
+    clientId: "D3kphw_r2J7IXeoIp6j8TH0sDm7IaoUUMu0xF4i_Tjeb4j9v193BivWqBQMsPcVeLgg6IZfEFW3LEhWLdOBiYw",
     secretKey: secretKey,
   });
