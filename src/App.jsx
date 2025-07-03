@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ConnectWallet, useAddress } from "@thirdweb-dev/react";
+import { ConnectWallet, useAddress, useContract, useContractRead } from "@thirdweb-dev/react";
 import { ArrowRight, Heart, Wallet, CheckCircle, ArrowLeft, Mail, Building, User, MessageSquare, Phone, Globe } from 'lucide-react';
 import { ethers } from 'ethers';
 import { client } from "./thirdwebClient";
+import abiJson from "./abi.json";
+
 
 const CAMPAIGN = {
   title: "Support STEM Showcases in Kisumu & Nakuru",
@@ -29,14 +31,10 @@ function App() {
   
   // Donation page state
   const address = useAddress();
-  const [projectId, setProjectId] = useState("1");
+  const [projectId, setProjectId] = useState(1);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  const [totalDonated, setTotalDonated] = useState(null);
-  const [ethPrice, setEthPrice] = useState(null);
-  const [userContribution, setUserContribution] = useState(null);
   const [recentDonations, setRecentDonations] = useState([]);
-  const [numDeposits, setNumDeposits] = useState(null);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [inputEth, setInputEth] = useState("");
   const [inputUsd, setInputUsd] = useState("");
@@ -62,13 +60,25 @@ function App() {
   const [formSubmitted, setFormSubmitted] = useState(false);
 
   // Mock ABI for demo purposes
-  const abi = [
-    "function depositETH(uint256 projectId) external payable",
-    "function getProjectInfo(uint256 projectId) external view returns (string memory, uint256, address)",
-    "function getDonorAmount(uint256 projectId, address donor) external view returns (uint256)",
-    "function getProjectDonors(uint256 projectId) external view returns (address[])",
-    "function getProjectDeposits(uint256 projectId) external view returns (uint256[])"
-  ];
+  const abi = abiJson.output.abi;
+
+  // Read contract data using thirdweb hooks
+  const { contract } = useContract(CONTRACT_ADDRESS, abi);
+  const { data: projectInfo } = useContractRead(contract, "getProjectInfo", [projectId]);
+  const { data: donorAmount } = useContractRead(contract, "getDonorAmount", [projectId, address]);
+  const { data: donors } = useContractRead(contract, "getProjectDonors", [projectId]);
+  const { data: deposits, error: depositsError } = useContractRead(contract, "getProjectDeposits", [projectId]);
+  const numDeposits = deposits ? deposits.length : 0;
+
+  // For total donated
+  const totalDonated = projectInfo && projectInfo[1]
+    ? ethers.utils.formatEther(projectInfo[1])
+    : "0";
+
+  // For user contribution
+  const userContribution = donorAmount ? ethers.utils.formatEther(donorAmount) : "0";
+
+  const [ethPrice, setEthPrice] = useState(null);
 
   async function connectWallet() {
     if (!window.ethereum) {
@@ -87,141 +97,49 @@ function App() {
     }
   }
 
-  async function fetchTotalDonated() {
-    try {
-      if (!projectId) {
-        setTotalDonated(null);
-        return;
-      }
-      const providerEthers = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, providerEthers);
-      // getProjectInfo returns (name, totalDeposited, ...)
-      const info = await contract.getProjectInfo(projectId);
-      // info[1] is totalDeposited
-      setTotalDonated(ethers.formatEther(info[1]));
-    } catch (err) {
-      setTotalDonated(null);
-    }
-  }
-
-  async function fetchEthPrice() {
-    try {
-      const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
-      const data = await res.json();
-      setEthPrice(data.ethereum.usd);
-    } catch {
-      setEthPrice(2500); // Fallback price
-    }
-  }
-
   useEffect(() => {
-    fetchTotalDonated();
-    fetchEthPrice();
-    // Set default amount to $0.5 in ETH after fetching price
-    async function setDefaultAmount() {
+    let interval;
+    async function fetchEthPrice() {
       try {
         const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
         const data = await res.json();
-        const ethPrice = data.ethereum.usd || 2500;
-        if (ethPrice) {
-          const ethAmount = (0.5 / ethPrice).toFixed(6);
-          setInputEth(ethAmount);
-          setInputUsd("0.50");
-        }
+        setEthPrice(data.ethereum.usd);
       } catch {
-        const ethAmount = (0.5 / 2500).toFixed(6);
-        setInputEth(ethAmount);
-        setInputUsd("0.50");
+        setEthPrice(2500); // Fallback price
       }
     }
-    setDefaultAmount();
-    setNumDeposits(15); // Mock data
-
-    // Refresh ETH price every 20 seconds
-    const interval = setInterval(() => {
-      fetchEthPrice();
-    }, 20000);
+    fetchEthPrice();
+    interval = setInterval(fetchEthPrice, 60000); // Fetch every 1 minute
     return () => clearInterval(interval);
-  }, [projectId]);
-
-  useEffect(() => {
-    async function fetchUserContribution() {
-      if (!address || !projectId) {
-        setUserContribution(null);
-        return;
-      }
-      try {
-        // Mock user contribution
-        setUserContribution("0.1234");
-      } catch (err) {
-        setUserContribution(null);
-      }
-    }
-    fetchUserContribution();
-  }, [address, projectId]);
+  }, []);
 
   // Sync ETH and USD input fields
   useEffect(() => {
-    if (!ethPrice) return;
+    if (!inputEth || !inputUsd) return;
     // If ETH input changes, update USD
     if (inputEth !== "" && document.activeElement && document.activeElement.name === "ethInput") {
-      setInputUsd((parseFloat(inputEth) * ethPrice).toFixed(2));
+      setInputUsd((parseFloat(inputEth) * parseFloat(inputEth)).toFixed(2));
     }
     // If USD input changes, update ETH
     if (inputUsd !== "" && document.activeElement && document.activeElement.name === "usdInput") {
-      setInputEth((parseFloat(inputUsd) / ethPrice).toFixed(6));
+      setInputEth((parseFloat(inputUsd) / parseFloat(inputEth)).toFixed(6));
     }
-  }, [inputEth, inputUsd, ethPrice]);
+  }, [inputEth, inputUsd]);
 
-  useEffect(() => {
-    async function fetchNumDeposits() {
-      if (!projectId) {
-        setNumDeposits(null);
-        return;
-      }
-      try {
-        // Use the user's wallet if available, otherwise fallback to a public provider
-        const provider = window.ethereum
-          ? new ethers.BrowserProvider(window.ethereum)
-          : ethers.getDefaultProvider(); // fallback for read-only
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, provider);
-        const depositIds = await contract.getProjectDeposits(projectId);
-        setNumDeposits(depositIds.length);
-      } catch (err) {
-        setNumDeposits(null);
-        // Optionally log the error for debugging
-        // console.error("Failed to fetch number of deposits:", err);
-      }
-    }
-    fetchNumDeposits();
-  }, [projectId, totalDonated]);
-
-  async function donate() {
-    setStatus("");
-    setLoading(true);
+  const handleDonate = async () => {
     try {
-      if (!window.ethereum) throw new Error("MetaMask not found");
-      if (!projectId) throw new Error("Project ID is required");
-      
-      // In real implementation, this would call the smart contract
-      // const provider = new ethers.BrowserProvider(window.ethereum);
-      // const signer = await provider.getSigner();
-      // const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer);
-      // const tx = await contract.depositETH(projectId, { value: ethers.parseEther(inputEth) });
-      // await tx.wait();
-      
-      // Simulate donation process for demo
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      setStatus("Donation successful! Thank you.");
-      setInputEth("");
-      setInputUsd("");
-      fetchTotalDonated(); // Refresh total after donation
+      // Example: deposit 0.01 ETH to projectId 1
+      await depositETH({
+        args: [1], // projectId
+        overrides: {
+          value: ethers.utils.parseEther("0.01"), // amount in ETH
+        },
+      });
+      alert("Donation successful!");
     } catch (err) {
-      setStatus("Error: " + (err.reason || err.message || "Transaction failed"));
+      alert("Donation failed: " + err.message);
     }
-    setLoading(false);
-  }
+  };
 
   const handleOrgFormSubmit = async (e) => {
     e.preventDefault();
@@ -678,7 +596,7 @@ function App() {
   }
 
   // Donation Page with new content and logic
-  const totalDonatedUSD = totalDonated && ethPrice ? (parseFloat(totalDonated) * ethPrice).toFixed(2) : null;
+  const totalDonatedUSD = totalDonated && inputEth ? (parseFloat(totalDonated) * parseFloat(inputEth)).toFixed(2) : null;
 
   // Interactive Impact Calculator Component
   const MEAL_COST = 0.5;
@@ -860,9 +778,9 @@ function App() {
               {/* Progress */}
               <div className="space-y-4 mb-8">
                 <div className="text-3xl font-bold">
-                  {totalDonated === null || ethPrice === null
+                  {totalDonated === null || inputEth === null
                     ? 'Loading...'
-                    : `$${Number(totalDonated * ethPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    : `$${Number(totalDonated * inputEth).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   <span className="text-lg text-orange-600 font-normal"> raised</span>
                 </div>
                 
@@ -874,8 +792,8 @@ function App() {
                 <div className="h-4 bg-gray-200 rounded-full overflow-hidden relative">
                   {(() => {
                     let percent = 0;
-                    if (totalDonated !== null && ethPrice !== null) {
-                      const donatedUSD = Number(totalDonated) * ethPrice;
+                    if (totalDonated !== null && inputEth !== null) {
+                      const donatedUSD = Number(totalDonated) * inputEth;
                       percent = Math.min(100, (donatedUSD / DONATION_GOAL) * 100);
                     }
                     return (
@@ -906,84 +824,80 @@ function App() {
 
                 {/* Wallet Connection */}
                 {!address ? (
-                  <ConnectWallet client={client}
-                  appMetadata={{
-                    name: "ChetuPamoja",
-                    url: "https://www.chetupamoja.co.ke",
-                  }}className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl hover:bg-orange-600 transition-colors" />
+                  <ConnectWallet
+                    className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl hover:bg-orange-600 transition-colors"
+                  />
                 ) : (
-                  <div className="space-y-4">
-                    <div className="text-sm text-green-600 font-medium">
-                      ✓ Wallet Connected: {address.slice(0, 6)}...{address.slice(-4)}
-                    </div>
-                    
-                    {/* Amount Inputs */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium mb-1">ETH Amount</label>
-                        <input
-                          name="ethInput"
-                          type="number"
-                          min="0.0001"
-                          step="0.0001"
-                          value={inputEth}
-                          onChange={e => setInputEth(e.target.value)}
-                          className="w-full p-3 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          disabled={loading}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium mb-1">USD Amount</label>
-                        <input
-                          name="usdInput"
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          value={inputUsd}
-                          onChange={e => setInputUsd(e.target.value)}
-                          className="w-full p-3 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          disabled={loading}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Donate Button */}
-                    <button 
-                      onClick={donate} 
-                      disabled={!address || !inputEth || !projectId || loading}
-                      className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                      {loading ? (
-                        "Processing..."
-                      ) : (
-                        <>
-                          <Heart className="w-4 h-4" />
-                          Donate
-                        </>
-                      )}
-                    </button>
-
-                    {/* Share Button */}
-                    <button
-                      onClick={handleShare}
-                      style={{
-                        width: '100%',
-                        background: '#fff',
-                        color: '#ff9800',
-                        fontWeight: 700,
-                        fontSize: FONT_MEDIUM,
-                        border: '2px solid #ff9800',
-                        borderRadius: 8,
-                        padding: '18px 0',
-                        marginBottom: 16,
-                        cursor: 'pointer',
-                        boxShadow: '0 1px 4px #0001'
-                      }}
-                    >
-                      Share
-                    </button>
+                  <div className="text-sm text-green-600 font-medium">
+                    ✓ Wallet Connected: {address.slice(0, 6)}...{address.slice(-4)}
                   </div>
                 )}
+
+                {/* Amount Inputs */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">ETH Amount</label>
+                    <input
+                      name="ethInput"
+                      type="number"
+                      min="0.0001"
+                      step="0.0001"
+                      value={inputEth}
+                      onChange={e => setInputEth(e.target.value)}
+                      className="w-full p-3 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">USD Amount</label>
+                    <input
+                      name="usdInput"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={inputUsd}
+                      onChange={e => setInputUsd(e.target.value)}
+                      className="w-full p-3 border border-orange-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+
+                {/* Donate Button */}
+                <button 
+                  onClick={handleDonate} 
+                  disabled={!address || !inputEth || !projectId || loading}
+                  className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    "Processing..."
+                  ) : (
+                    <>
+                      <Heart className="w-4 h-4" />
+                      Donate
+                    </>
+                  )}
+                </button>
+
+                {/* Share Button */}
+                <button
+                  onClick={handleShare}
+                  style={{
+                    width: '100%',
+                    background: '#fff',
+                    color: '#ff9800',
+                    fontWeight: 700,
+                    fontSize: FONT_MEDIUM,
+                    border: '2px solid #ff9800',
+                    borderRadius: 8,
+                    padding: '18px 0',
+                    marginBottom: 16,
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 4px #0001'
+                  }}
+                >
+                  Share
+                </button>
 
                 {/* Status Message */}
                 {status && (
