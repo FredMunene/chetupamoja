@@ -1,37 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
-import "@openzeppelin/contracts/utils/Base64.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 
-/**
- * @title DonationNFT
- * @dev NFT contract for donation campaign rewards with proportional scaling
- */
-contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
-    using Counters for Counters.Counter;
-    using Strings for uint256;
-    
-    // Enums
-    enum TierType { FIRST_CHAMPION, STEALTH_NINJA, DIAMOND, PLATINUM, GOLD, SILVER }
-    
-    // Structs
-    struct NFTMetadata {
-        uint256 projectId;
-        string projectName;
-        string image;
-        TierType tier;
-        uint256 rankNumber;
-        uint256 donationAmount;
-        uint256 totalDonors;
-        uint256 mintTimestamp;
-    }
-    
+// Interface for the NFT contract
+interface IDonationNFT {
     struct TierCounts {
         uint256 diamond;
         uint256 platinum;
@@ -39,391 +16,707 @@ contract DonationNFT is ERC721, ERC721URIStorage, Ownable, ReentrancyGuard {
         uint256 silver;
     }
     
-    // State variables
-    Counters.Counter private _tokenIdCounter;
-    mapping(uint256 => NFTMetadata) public nftMetadata;
-    mapping(uint256 => bool) public hasFirstChampion; // projectId => has minted
-    mapping(uint256 => bool) public hasStealthNinja; // projectId => has minted
-    mapping(uint256 => uint256) public firstChampionAmount; // projectId => first donation amount
+    function mintFirstChampion(
+        address recipient,
+        uint256 projectId,
+        string memory projectName,
+        uint256 donationAmount
+    ) external returns (uint256 tokenId);
     
-    // NEW: Authorized minter mapping
-    mapping(address => bool) public authorizedMinters;
+    function mintStealthNinja(
+        address recipient,
+        uint256 projectId,
+        string memory projectName,
+        uint256 donationAmount
+    ) external returns (uint256 tokenId);
+    
+    function endCampaignAndMintTiers(
+        uint256 projectId,
+        string memory projectName,
+        address[] calldata sortedDonors,
+        uint256[] calldata sortedAmounts
+    ) external;
+    
+    function calculateTierCounts(uint256 totalDonors) external pure returns (TierCounts memory);
+    
+    function getProjectNFTStatus(uint256 projectId) external view returns (bool hasFC, bool hasSN);
+}
+
+/**
+ * @title ProjectDonationContractWithNFT
+ * @dev Smart contract for handling donations with NFT reward system
+ */
+contract ProjectDonationContractWithNFT is ReentrancyGuard, Ownable, Pausable {
+    
+    // Enums
+    enum TokenType { ETH, ERC20 }
+    
+    // Structs
+    struct Deposit {
+        address depositor;
+        uint256 amount;
+        address tokenAddress; // address(0) for ETH
+        TokenType tokenType;
+        uint256 projectId;
+        uint256 timestamp;
+        bool withdrawn;
+    }
+    
+    struct Project {
+        string name;
+        uint256 totalDeposited;
+        uint256 totalWithdrawn;
+        bool active;
+        uint256 createdAt;
+        uint256 endTime; // Campaign end time
+        bool campaignEnded;
+        address[] donors; // Array of unique donors
+        mapping(address => uint256) donorTotalAmount; // Total donated by each donor
+        uint256 firstChampionAmount; // Amount of first donation
+    }
+    
+    struct DonorRanking {
+        address donor;
+        uint256 totalAmount;
+    }
+    
+    // State variables
+    mapping(uint256 => Deposit) public deposits;
+    mapping(uint256 => Project) public projects;
+    mapping(uint256 => uint256[]) public projectDeposits; // projectId => depositIds[]
+    mapping(address => uint256[]) public userDeposits; // user => depositIds[]
+    mapping(address => bool) public allowedTokens;
+    mapping(uint256 => mapping(address => bool)) public hasDeposited; // projectId => donor => hasDeposited
+    
+    uint256 public nextDepositId = 1;
+    uint256 public nextProjectId = 1;
+    uint256 public defaultCampaignDuration = 30 days;
+    
+    // NFT contract reference
+    IDonationNFT public donationNFT;
     
     // Events
-    event NFTMinted(
-        address indexed recipient,
-        uint256 indexed tokenId,
+    event DepositMade(
+        address indexed depositor,
+        uint256 indexed depositId,
         uint256 indexed projectId,
-        TierType tier,
-        uint256 rankNumber
+        uint256 amount,
+        TokenType tokenType,
+        address tokenAddress
+    );
+    
+    event WithdrawalMade(
+        address indexed recipient,
+        uint256 indexed depositId,
+        uint256 amount,
+        TokenType tokenType,
+        address tokenAddress
+    );
+    
+    event ProjectCreated(
+        uint256 indexed projectId,
+        string name,
+        uint256 endTime
     );
     
     event CampaignEnded(
         uint256 indexed projectId,
         uint256 totalDonors,
-        TierCounts tierCounts
+        uint256 totalAmount
     );
     
-    event MinterAuthorized(address indexed minter, bool authorized);
+    event FirstChampionAwarded(
+        uint256 indexed projectId,
+        address indexed champion,
+        uint256 amount
+    );
+    
+    event StealthNinjaAwarded(
+        uint256 indexed projectId,
+        address indexed ninja,
+        uint256 amount
+    );
     
     // Constructor
-    constructor(address initialOwner) ERC721("DonationChampion", "DONFT") Ownable(initialOwner) {}
-    
-    // NEW: Modifier to restrict minting to authorized addresses
-    modifier onlyMinter() {
-        require(authorizedMinters[msg.sender] || msg.sender == owner(), "Not authorized to mint NFTs");
+    constructor(address _donationNFT) Ownable(msg.sender) {
+        require(_donationNFT != address(0), "Invalid NFT contract address");
+        donationNFT = IDonationNFT(_donationNFT);
+    }
+
+    // Modifiers
+    modifier validProject(uint256 projectId) {
+        require(projectId > 0 && projectId < nextProjectId, "Invalid project ID");
+        require(projects[projectId].active, "Project not active");
+        require(!projects[projectId].campaignEnded, "Campaign has ended");
+        require(block.timestamp < projects[projectId].endTime, "Campaign time expired");
         _;
     }
     
+    // Project Management Functions
+    
     /**
-     * @notice Authorize/deauthorize an address to mint NFTs
-     * @param minter Address to authorize/deauthorize
-     * @param authorized Whether the address should be authorized
+     * @notice Create a new project/donation campaign
+     * @param name Project name
+     * @param durationDays Campaign duration in days (0 for default)
      */
-    function setAuthorizedMinter(address minter, bool authorized) external onlyOwner {
-        require(minter != address(0), "Invalid minter address");
-        authorizedMinters[minter] = authorized;
-        emit MinterAuthorized(minter, authorized);
+    function createProject(
+        string memory name,
+        uint256 durationDays
+    ) external onlyOwner returns (uint256 projectId) {
+        require(bytes(name).length > 0, "Project name required");
+        
+        projectId = nextProjectId++;
+        uint256 duration = durationDays > 0 ? durationDays * 1 days : defaultCampaignDuration;
+        uint256 endTime = block.timestamp + duration;
+        
+        Project storage newProject = projects[projectId];
+        newProject.name = name;
+        newProject.totalDeposited = 0;
+        newProject.totalWithdrawn = 0;
+        newProject.active = true;
+        newProject.createdAt = block.timestamp;
+        newProject.endTime = endTime;
+        newProject.campaignEnded = false;
+        newProject.firstChampionAmount = 0;
+        
+        emit ProjectCreated(projectId, name, endTime);
     }
     
     /**
-     * @notice Check if an address is authorized to mint
-     * @param minter Address to check
-     * @return Whether the address is authorized
+     * @notice Set allowed token addresses
+     * @param tokenAddress Address of the ERC20 token
+     * @param allowed Whether the token is allowed for deposits
      */
-    function isAuthorizedMinter(address minter) external view returns (bool) {
-        return authorizedMinters[minter] || minter == owner();
+    function setAllowedToken(address tokenAddress, bool allowed) external onlyOwner {
+        require(tokenAddress != address(0), "Invalid token address");
+        allowedTokens[tokenAddress] = allowed;
     }
     
     /**
-     * @notice Mint "First Champion" NFT for the first depositor
-     * @param recipient Address to receive the NFT
-     * @param projectId Project ID
-     * @param projectName Name of the project
-     * @param image Image URL of the project
-     * @param donationAmount Amount donated
+     * @notice Set NFT contract address
+     * @param _donationNFT New NFT contract address
      */
-    function mintFirstChampion(
-        address recipient,
+    function setNFTContract(address _donationNFT) external onlyOwner {
+        require(_donationNFT != address(0), "Invalid NFT contract address");
+        donationNFT = IDonationNFT(_donationNFT);
+    }
+    
+    /**
+     * @notice Set default campaign duration
+     * @param _duration Duration in seconds
+     */
+    function setDefaultCampaignDuration(uint256 _duration) external onlyOwner {
+        require(_duration > 0, "Duration must be greater than 0");
+        defaultCampaignDuration = _duration;
+    }
+    
+    // Deposit Functions
+    
+    /**
+     * @notice Deposit ETH to a specific project
+     * @param projectId Project ID to deposit to
+     */
+    function depositETH(uint256 projectId) 
+        external 
+        payable 
+        nonReentrant 
+        whenNotPaused 
+        validProject(projectId) 
+        returns (uint256 depositId) 
+    {
+        require(msg.value > 0, "Amount must be greater than 0");
+        
+        depositId = _createDeposit(msg.sender, address(0), msg.value, TokenType.ETH, projectId);
+        _handleNFTRewards(msg.sender, projectId, msg.value);
+        
+        emit DepositMade(msg.sender, depositId, projectId, msg.value, TokenType.ETH, address(0));
+    }
+    
+    /**
+     * @notice Deposit ERC20 tokens with permit (gasless approval)
+     * @param tokenAddress Address of the ERC20 token
+     * @param amount Amount to deposit
+     * @param projectId Project ID to deposit to
+     * @param deadline Permit deadline
+     * @param v Permit signature v
+     * @param r Permit signature r
+     * @param s Permit signature s
+     */
+    function depositERC20WithPermit(
+        address tokenAddress,
+        uint256 amount,
         uint256 projectId,
-        string memory projectName,
-        string memory image,
-        uint256 donationAmount
-    ) external onlyMinter nonReentrant returns (uint256 tokenId) {
-        require(!hasFirstChampion[projectId], "First Champion already minted for this project");
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external nonReentrant whenNotPaused validProject(projectId) returns (uint256 depositId) {
+        require(tokenAddress != address(0), "Invalid token address");
+        require(amount > 0, "Amount must be greater than 0");
+        require(allowedTokens[tokenAddress], "Token not allowed");
+        
+        // Execute permit
+        IERC20Permit(tokenAddress).permit(
+            msg.sender,
+            address(this),
+            amount,
+            deadline,
+            v,
+            r,
+            s
+        );
+        
+        // Transfer tokens from user to contract
+        require(
+            IERC20(tokenAddress).transferFrom(msg.sender, address(this), amount),
+            "Token transfer failed"
+        );
+        
+        depositId = _createDeposit(msg.sender, tokenAddress, amount, TokenType.ERC20, projectId);
+        _handleNFTRewards(msg.sender, projectId, amount);
+        
+        emit DepositMade(msg.sender, depositId, projectId, amount, TokenType.ERC20, tokenAddress);
+    }
+    
+    /**
+     * @notice Regular ERC20 deposit (requires prior approval)
+     * @param tokenAddress Address of the ERC20 token
+     * @param amount Amount to deposit
+     * @param projectId Project ID to deposit to
+     */
+    function depositERC20(
+        address tokenAddress,
+        uint256 amount,
+        uint256 projectId
+    ) external nonReentrant whenNotPaused validProject(projectId) returns (uint256 depositId) {
+        require(tokenAddress != address(0), "Invalid token address");
+        require(amount > 0, "Amount must be greater than 0");
+        require(allowedTokens[tokenAddress], "Token not allowed");
+        
+        // Transfer tokens from user to contract
+        require(
+            IERC20(tokenAddress).transferFrom(msg.sender, address(this), amount),
+            "Token transfer failed"
+        );
+        
+        depositId = _createDeposit(msg.sender, tokenAddress, amount, TokenType.ERC20, projectId);
+        _handleNFTRewards(msg.sender, projectId, amount);
+        
+        emit DepositMade(msg.sender, depositId, projectId, amount, TokenType.ERC20, tokenAddress);
+    }
+    
+    /**
+     * @notice Create a deposit record
+     * @param depositor Address of the depositor
+     * @param tokenAddress Token address (address(0) for ETH)
+     * @param amount Deposit amount
+     * @param tokenType Type of token
+     * @param projectId Project ID
+     * @return depositId The created deposit ID
+     */
+    function _createDeposit(
+        address depositor,
+        address tokenAddress,
+        uint256 amount,
+        TokenType tokenType,
+        uint256 projectId
+    ) internal returns (uint256 depositId) {
+        depositId = nextDepositId++;
+        
+        deposits[depositId] = Deposit({
+            depositor: depositor,
+            amount: amount,
+            tokenAddress: tokenAddress,
+            tokenType: tokenType,
+            projectId: projectId,
+            timestamp: block.timestamp,
+            withdrawn: false
+        });
+        
+        projectDeposits[projectId].push(depositId);
+        userDeposits[depositor].push(depositId);
+        projects[projectId].totalDeposited += amount;
+    }
+    
+    /**
+     * @notice Handle NFT rewards for deposits
+     * @param depositor Address of the depositor
+     * @param projectId Project ID
+     * @param amount Deposit amount
+     */
+    function _handleNFTRewards(address depositor, uint256 projectId, uint256 amount) internal {
+        Project storage project = projects[projectId];
+        
+        // Add depositor to project if first time
+        if (!hasDeposited[projectId][depositor]) {
+            project.donors.push(depositor);
+            hasDeposited[projectId][depositor] = true;
+        }
+        
+        // Update donor's total amount
+        project.donorTotalAmount[depositor] += amount;
+        uint256 newTotalAmount = project.donorTotalAmount[depositor];
+        
+        // Get NFT status for this project
+        (bool hasFirstChampion, bool hasStealthNinja) = donationNFT.getProjectNFTStatus(projectId);
+        
+        // Check for First Champion (first depositor)
+        if (!hasFirstChampion && project.donors.length == 1) {
+            donationNFT.mintFirstChampion(depositor, projectId, project.name, newTotalAmount);
+            project.firstChampionAmount = newTotalAmount;
+            
+            emit FirstChampionAwarded(projectId, depositor, newTotalAmount);
+        }
+        // Check for Stealth Ninja (first donation larger than first champion)
+        else if (hasFirstChampion && !hasStealthNinja && newTotalAmount > project.firstChampionAmount) {
+            donationNFT.mintStealthNinja(depositor, projectId, project.name, newTotalAmount);
+            
+            emit StealthNinjaAwarded(projectId, depositor, newTotalAmount);
+        }
+    }
+    
+    // Campaign Management Functions
+    
+    /**
+     * @notice End campaign manually and distribute tier NFTs
+     * @param projectId Project ID to end
+     */
+    function endCampaign(uint256 projectId) external onlyOwner nonReentrant {
+        require(projectId > 0 && projectId < nextProjectId, "Invalid project ID");
+        require(!projects[projectId].campaignEnded, "Campaign already ended");
+        
+        Project storage project = projects[projectId];
+        project.campaignEnded = true;
+        project.active = false;
+        
+        _distributeTierNFTs(projectId);
+        
+        emit CampaignEnded(projectId, project.donors.length, project.totalDeposited);
+    }
+    
+    /**
+     * @notice End expired campaigns and distribute tier NFTs
+     * @param projectId Project ID to check and end if expired
+     */
+    function endExpiredCampaign(uint256 projectId) external nonReentrant {
+        require(projectId > 0 && projectId < nextProjectId, "Invalid project ID");
+        require(!projects[projectId].campaignEnded, "Campaign already ended");
+        require(block.timestamp >= projects[projectId].endTime, "Campaign not yet expired");
+        
+        Project storage project = projects[projectId];
+        project.campaignEnded = true;
+        project.active = false;
+        
+        _distributeTierNFTs(projectId);
+        
+        emit CampaignEnded(projectId, project.donors.length, project.totalDeposited);
+    }
+    
+    /**
+     * @notice Internal function to distribute tier-based NFTs using optimized sorting
+     * @param projectId Project ID
+     */
+    function _distributeTierNFTs(uint256 projectId) internal {
+        Project storage project = projects[projectId];
+        
+        if (project.donors.length == 0) return;
+        
+        // Create array of donor rankings
+        DonorRanking[] memory rankings = new DonorRanking[](project.donors.length);
+        
+        for (uint256 i = 0; i < project.donors.length; i++) {
+            rankings[i] = DonorRanking({
+                donor: project.donors[i],
+                totalAmount: project.donorTotalAmount[project.donors[i]]
+            });
+        }
+        
+        // Sort rankings by amount (highest first) - using bubble sort for simplicity
+        // For production, consider using a more efficient sorting algorithm
+        for (uint256 i = 0; i < rankings.length - 1; i++) {
+            for (uint256 j = 0; j < rankings.length - i - 1; j++) {
+                if (rankings[j].totalAmount < rankings[j + 1].totalAmount) {
+                    DonorRanking memory temp = rankings[j];
+                    rankings[j] = rankings[j + 1];
+                    rankings[j + 1] = temp;
+                }
+            }
+        }
+        
+        // Prepare sorted arrays for NFT contract
+        address[] memory sortedDonors = new address[](rankings.length);
+        uint256[] memory sortedAmounts = new uint256[](rankings.length);
+        
+        for (uint256 i = 0; i < rankings.length; i++) {
+            sortedDonors[i] = rankings[i].donor;
+            sortedAmounts[i] = rankings[i].totalAmount;
+        }
+        
+        // Call NFT contract to mint tier NFTs
+        donationNFT.endCampaignAndMintTiers(
+            projectId,
+            project.name,
+            sortedDonors,
+            sortedAmounts
+        );
+    }
+    
+    // Withdrawal Functions
+    
+    /**
+     * @notice Withdraw funds from a specific deposit (only owner)
+     * @param depositId Deposit ID to withdraw from
+     * @param recipient Address to receive the funds
+     */
+    function withdrawDeposit(uint256 depositId, address payable recipient) 
+        external 
+        onlyOwner 
+        nonReentrant 
+    {
+        require(depositId > 0 && depositId < nextDepositId, "Invalid deposit ID");
         require(recipient != address(0), "Invalid recipient address");
         
-        tokenId = _tokenIdCounter.current();
-        _tokenIdCounter.increment();
+        Deposit storage deposit = deposits[depositId];
+        require(!deposit.withdrawn, "Deposit already withdrawn");
+        require(projects[deposit.projectId].campaignEnded, "Campaign not ended");
         
-        // Mint NFT
-        _safeMint(recipient, tokenId);
+        deposit.withdrawn = true;
+        projects[deposit.projectId].totalWithdrawn += deposit.amount;
         
-        // Store metadata
-        nftMetadata[tokenId] = NFTMetadata({
-            projectId: projectId,
-            projectName: projectName,
-            image: image,
-            tier: TierType.FIRST_CHAMPION,
-            rankNumber: 1,
-            donationAmount: donationAmount,
-            totalDonors: 1,
-            mintTimestamp: block.timestamp
-        });
+        if (deposit.tokenType == TokenType.ETH) {
+            recipient.transfer(deposit.amount);
+        } else {
+            require(
+                IERC20(deposit.tokenAddress).transfer(recipient, deposit.amount),
+                "Token transfer failed"
+            );
+        }
         
-        hasFirstChampion[projectId] = true;
-        firstChampionAmount[projectId] = donationAmount;
-        
-        // Set token URI
-        _setTokenURI(tokenId, _generateTokenURI(tokenId));
-        
-        emit NFTMinted(recipient, tokenId, projectId, TierType.FIRST_CHAMPION, 1);
+        emit WithdrawalMade(
+            recipient,
+            depositId,
+            deposit.amount,
+            deposit.tokenType,
+            deposit.tokenAddress
+        );
     }
     
     /**
-     * @notice Mint "Stealth Ninja" NFT for first donation larger than the first champion
-     * @param recipient Address to receive the NFT
-     * @param projectId Project ID
-     * @param projectName Name of the project
-     * @param image Image URL of the project
-     * @param donationAmount Amount donated
+     * @notice Withdraw all funds from a project (only owner)
+     * @param projectId Project ID to withdraw from
+     * @param recipient Address to receive the funds
      */
-    function mintStealthNinja(
-        address recipient,
-        uint256 projectId,
-        string memory projectName,
-        string memory image,
-        uint256 donationAmount
-    ) external onlyMinter nonReentrant returns (uint256 tokenId) {
+    function withdrawProjectFunds(uint256 projectId, address payable recipient) 
+        external 
+        onlyOwner 
+        nonReentrant 
+    {
+        require(projectId > 0 && projectId < nextProjectId, "Invalid project ID");
         require(recipient != address(0), "Invalid recipient address");
-        require(hasFirstChampion[projectId], "First Champion must exist");
-        require(!hasStealthNinja[projectId], "Stealth Ninja already minted for this project");
-        require(donationAmount > firstChampionAmount[projectId], "Amount must be larger than first champion");
+        require(projects[projectId].campaignEnded, "Campaign not ended");
         
-        tokenId = _tokenIdCounter.current();
-        _tokenIdCounter.increment();
+        uint256[] memory deposits_list = projectDeposits[projectId];
+        uint256 totalETH = 0;
         
-        // Mint NFT
-        _safeMint(recipient, tokenId);
         
-        // Store metadata
-        nftMetadata[tokenId] = NFTMetadata({
-            projectId: projectId,
-            projectName: projectName,
-            image: image,
-            tier: TierType.STEALTH_NINJA,
-            rankNumber: 1,
-            donationAmount: donationAmount,
-            totalDonors: 0, // Will be updated at campaign end
-            mintTimestamp: block.timestamp
-        });
+        for (uint256 i = 0; i < deposits_list.length; i++) {
+            Deposit storage deposit = deposits[deposits_list[i]];
+            if (!deposit.withdrawn) {
+                deposit.withdrawn = true;
+                
+                if (deposit.tokenType == TokenType.ETH) {
+                    totalETH += deposit.amount;
+                } else {
+                    // For ERC20 tokens, we'll handle them separately
+                    // This is a simplified approach - in production you might want more sophisticated token handling
+                }
+                
+                emit WithdrawalMade(
+                    recipient,
+                    deposits_list[i],
+                    deposit.amount,
+                    deposit.tokenType,
+                    deposit.tokenAddress
+                );
+            }
+        }
         
-        hasStealthNinja[projectId] = true;
+        projects[projectId].totalWithdrawn = projects[projectId].totalDeposited;
         
-        // Set token URI
-        _setTokenURI(tokenId, _generateTokenURI(tokenId));
+        // Transfer ETH
+        if (totalETH > 0) {
+            recipient.transfer(totalETH);
+        }
         
-        emit NFTMinted(recipient, tokenId, projectId, TierType.STEALTH_NINJA, 1);
+        // Note: For ERC20 tokens, you would need to implement separate withdrawal logic
+        // due to Solidity limitations with dynamic mappings in memory
     }
     
     /**
-     * @notice End campaign and mint tier-based NFTs using proportional scaling
+     * @notice Emergency withdrawal function for specific tokens (only owner)
+     * @param tokenAddress Token address (address(0) for ETH)
+     * @param amount Amount to withdraw
+     * @param recipient Recipient address
+     */
+    function emergencyWithdraw(
+        address tokenAddress,
+        uint256 amount,
+        address payable recipient
+    ) external onlyOwner nonReentrant {
+        require(recipient != address(0), "Invalid recipient address");
+        require(amount > 0, "Amount must be greater than 0");
+        
+        if (tokenAddress == address(0)) {
+            // ETH withdrawal
+            require(address(this).balance >= amount, "Insufficient ETH balance");
+            recipient.transfer(amount);
+        } else {
+            // ERC20 withdrawal
+            require(
+                IERC20(tokenAddress).transfer(recipient, amount),
+                "Token transfer failed"
+            );
+        }
+    }
+    
+    // View Functions
+    
+    /**
+     * @notice Get project information
      * @param projectId Project ID
-     * @param projectName Name of the project
-     * @param image Image URL of the project
-     * @param sortedDonors Array of donor addresses sorted by donation amount (highest first)
-     * @param sortedAmounts Array of donation amounts sorted (highest first)
+     * @return name Project name
+     * @return totalDeposited Total amount deposited
+     * @return totalWithdrawn Total amount withdrawn
+     * @return active Whether project is active
+     * @return createdAt Creation timestamp
+     * @return endTime Campaign end time
+     * @return campaignEnded Whether campaign has ended
+     * @return donorCount Number of unique donors
      */
-    function endCampaignAndMintTiers(
-        uint256 projectId,
-        string memory projectName,
-        string memory image,
-        address[] calldata sortedDonors,
-        uint256[] calldata sortedAmounts
-    ) external onlyMinter nonReentrant {
-        require(sortedDonors.length == sortedAmounts.length, "Arrays length mismatch");
-        require(sortedDonors.length > 0, "No donors provided");
+    function getProjectInfo(uint256 projectId) 
+        external 
+        view 
+        returns (
+            string memory name,
+            uint256 totalDeposited,
+            uint256 totalWithdrawn,
+            bool active,
+            uint256 createdAt,
+            uint256 endTime,
+            bool campaignEnded,
+            uint256 donorCount
+        ) 
+    {
+        require(projectId > 0 && projectId < nextProjectId, "Invalid project ID");
+        Project storage project = projects[projectId];
         
-        uint256 totalDonors = sortedDonors.length;
-        TierCounts memory tierCounts = calculateTierCounts(totalDonors);
-        
-        uint256 currentIndex = 0;
-        
-        // Mint Diamond Tier NFTs
-        for (uint256 i = 0; i < tierCounts.diamond && currentIndex < totalDonors; i++) {
-            _mintTierNFT(
-                sortedDonors[currentIndex],
-                projectId,
-                projectName,
-                image,
-                TierType.DIAMOND,
-                currentIndex + 1,
-                sortedAmounts[currentIndex],
-                totalDonors
-            );
-            currentIndex++;
-        }
-        
-        // Mint Platinum Tier NFTs
-        for (uint256 i = 0; i < tierCounts.platinum && currentIndex < totalDonors; i++) {
-            _mintTierNFT(
-                sortedDonors[currentIndex],
-                projectId,
-                projectName,
-                image,
-                TierType.PLATINUM,
-                currentIndex + 1,
-                sortedAmounts[currentIndex],
-                totalDonors
-            );
-            currentIndex++;
-        }
-        
-        // Mint Gold Tier NFTs
-        for (uint256 i = 0; i < tierCounts.gold && currentIndex < totalDonors; i++) {
-            _mintTierNFT(
-                sortedDonors[currentIndex],
-                projectId,
-                projectName,
-                image,
-                TierType.GOLD,
-                currentIndex + 1,
-                sortedAmounts[currentIndex],
-                totalDonors
-            );
-            currentIndex++;
-        }
-        
-        // Mint Silver Tier NFTs
-        for (uint256 i = 0; i < tierCounts.silver && currentIndex < totalDonors; i++) {
-            _mintTierNFT(
-                sortedDonors[currentIndex],
-                projectId,
-                projectName,
-                image,
-                TierType.SILVER,
-                currentIndex + 1,
-                sortedAmounts[currentIndex],
-                totalDonors
-            );
-            currentIndex++;
-        }
-        
-        emit CampaignEnded(projectId, totalDonors, tierCounts);
+        return (
+            project.name,
+            project.totalDeposited,
+            project.totalWithdrawn,
+            project.active,
+            project.createdAt,
+            project.endTime,
+            project.campaignEnded,
+            project.donors.length
+        );
     }
     
     /**
-     * @notice Calculate tier counts using proportional scaling system
-     * @param totalDonors Total number of donors
-     * @return TierCounts struct with calculated counts
-     */
-    function calculateTierCounts(uint256 totalDonors) public pure returns (TierCounts memory) {
-        TierCounts memory counts;
-        
-        // Proportional scaling formula
-        counts.diamond = totalDonors >= 100 ? totalDonors / 100 : 1;
-        counts.platinum = totalDonors >= 50 ? totalDonors / 50 : 1;
-        counts.gold = totalDonors >= 25 ? totalDonors / 25 : 2;
-        counts.silver = totalDonors >= 15 ? totalDonors / 15 : 3;
-        
-        // Ensure hierarchy: Diamond ≤ Platinum ≤ Gold ≤ Silver
-        if (counts.platinum < counts.diamond) counts.platinum = counts.diamond;
-        if (counts.gold < counts.platinum) counts.gold = counts.platinum;
-        if (counts.silver < counts.gold) counts.silver = counts.gold;
-        
-        return counts;
-    }
-    
-    /**
-     * @notice Internal function to mint tier-based NFTs
-     */
-    function _mintTierNFT(
-        address recipient,
-        uint256 projectId,
-        string memory projectName,
-        string memory image,
-        TierType tier,
-        uint256 rankNumber,
-        uint256 donationAmount,
-        uint256 totalDonors
-    ) internal {
-        uint256 tokenId = _tokenIdCounter.current();
-        _tokenIdCounter.increment();
-        
-        // Mint NFT
-        _safeMint(recipient, tokenId);
-        
-        // Store metadata
-        nftMetadata[tokenId] = NFTMetadata({
-            projectId: projectId,
-            projectName: projectName,
-            image: image,
-            tier: tier,
-            rankNumber: rankNumber,
-            donationAmount: donationAmount,
-            totalDonors: totalDonors,
-            mintTimestamp: block.timestamp
-        });
-        
-        // Set token URI
-        _setTokenURI(tokenId, _generateTokenURI(tokenId));
-        
-        emit NFTMinted(recipient, tokenId, projectId, tier, rankNumber);
-    }
-    
-    /**
-     * @notice Generate token URI with metadata
-     * @param tokenId Token ID
-     * @return Token URI string
-     */
-    function _generateTokenURI(uint256 tokenId) internal view returns (string memory) {
-        NFTMetadata memory metadata = nftMetadata[tokenId];
-        
-        string memory tierName = _getTierName(metadata.tier);
-        string memory description = string(abi.encodePacked(
-            "Donation Champion NFT for project '",
-            metadata.projectName,
-            "' - ",
-            tierName,
-            " (Rank #",
-            metadata.rankNumber.toString(),
-            " of ",
-            metadata.totalDonors.toString(),
-            " donors)"
-        ));
-        
-        string memory json = string(abi.encodePacked(
-            '{"name":"', metadata.projectName, " - ", tierName, '",',
-            '"description":"', description, '",',
-            '"image":"', metadata.image, '",',
-            '"attributes":[',
-                '{"trait_type":"Project","value":"', metadata.projectName, '"},',
-                '{"trait_type":"Tier","value":"', tierName, '"},',
-                '{"trait_type":"Rank","value":', metadata.rankNumber.toString(), '},',
-                '{"trait_type":"Total Donors","value":', metadata.totalDonors.toString(), '},',
-                '{"trait_type":"Donation Amount","value":', metadata.donationAmount.toString(), '}',
-            ']}'
-        ));
-        
-        return string(abi.encodePacked(
-            "data:application/json;base64,",
-            Base64.encode(bytes(json))
-        ));
-    }
-    
-    /**
-     * @notice Get tier name string
-     * @param tier TierType enum
-     * @return Tier name as string
-     */
-    function _getTierName(TierType tier) internal pure returns (string memory) {
-        if (tier == TierType.FIRST_CHAMPION) return "First Champion";
-        if (tier == TierType.STEALTH_NINJA) return "Stealth Ninja";
-        if (tier == TierType.DIAMOND) return "Diamond Tier";
-        if (tier == TierType.PLATINUM) return "Platinum Tier";
-        if (tier == TierType.GOLD) return "Gold Tier";
-        if (tier == TierType.SILVER) return "Silver Tier";
-        return "Unknown";
-    }
-    
-    function _exists(uint256 tokenId) internal view returns (bool) {
-        return nftMetadata[tokenId].projectId != 0;
-    }
-    
-    /**
-     * @notice Get NFT metadata for a token
-     * @param tokenId Token ID
-     * @return NFTMetadata struct
-     */
-    function getNFTMetadata(uint256 tokenId) external view returns (NFTMetadata memory) {
-        require(_exists(tokenId), "Token does not exist");
-        return nftMetadata[tokenId];
-    }
-    
-    /**
-     * @notice Get preview of tier counts for a given number of donors
-     * @param totalDonors Number of donors
-     * @return TierCounts struct
-     */
-    function previewTierCounts(uint256 totalDonors) external pure returns (TierCounts memory) {
-        return calculateTierCounts(totalDonors);
-    }
-    
-    /**
-     * @notice Check if a project has specific NFT types
+     * @notice Get project donors
      * @param projectId Project ID
-     * @return hasFC Whether First Champion exists
-     * @return hasSN Whether Stealth Ninja exists
+     * @return donors Array of donor addresses
      */
-    function getProjectNFTStatus(uint256 projectId) external view returns (bool hasFC, bool hasSN) {
-        return (hasFirstChampion[projectId], hasStealthNinja[projectId]);
+    function getProjectDonors(uint256 projectId) external view returns (address[] memory donors) {
+        require(projectId > 0 && projectId < nextProjectId, "Invalid project ID");
+        return projects[projectId].donors;
     }
     
-    function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage) returns (string memory) {
-        return super.tokenURI(tokenId);
+    /**
+     * @notice Get donor's total amount for a project
+     * @param projectId Project ID
+     * @param donor Donor address
+     * @return amount Total amount donated by the donor
+     */
+    function getDonorAmount(uint256 projectId, address donor) external view returns (uint256 amount) {
+        require(projectId > 0 && projectId < nextProjectId, "Invalid project ID");
+        return projects[projectId].donorTotalAmount[donor];
     }
     
-    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) {
-        return super.supportsInterface(interfaceId);
+    /**
+     * @notice Get deposit information
+     * @param depositId Deposit ID
+     * @return deposit Deposit struct
+     */
+    function getDepositInfo(uint256 depositId) external view returns (Deposit memory deposit) {
+        require(depositId > 0 && depositId < nextDepositId, "Invalid deposit ID");
+        return deposits[depositId];
+    }
+    
+    /**
+     * @notice Get user's deposits
+     * @param user User address
+     * @return depositIds Array of deposit IDs
+     */
+    function getUserDeposits(address user) external view returns (uint256[] memory depositIds) {
+        return userDeposits[user];
+    }
+    
+    /**
+     * @notice Get project's deposits
+     * @param projectId Project ID
+     * @return depositIds Array of deposit IDs
+     */
+    function getProjectDeposits(uint256 projectId) external view returns (uint256[] memory depositIds) {
+        require(projectId > 0 && projectId < nextProjectId, "Invalid project ID");
+        return projectDeposits[projectId];
+    }
+    
+    /**
+     * @notice Check if campaign is active
+     * @param projectId Project ID
+     * @return isActive Whether the campaign is active and accepting donations
+     */
+    function isCampaignActive(uint256 projectId) external view returns (bool isActive) {
+        if (projectId == 0 || projectId >= nextProjectId) return false;
+        
+        Project storage project = projects[projectId];
+        return project.active && 
+               !project.campaignEnded && 
+               block.timestamp < project.endTime;
+    }
+    
+    // Admin Functions
+    
+    /**
+     * @notice Pause the contract (only owner)
+     */
+    function pause() external onlyOwner {
+        _pause();
+    }
+    
+    /**
+     * @notice Unpause the contract (only owner)
+     */
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+    
+    /**
+     * @notice Get contract balance for a specific token
+     * @param tokenAddress Token address (address(0) for ETH)
+     * @return balance Contract balance
+     */
+    function getContractBalance(address tokenAddress) external view returns (uint256 balance) {
+        if (tokenAddress == address(0)) {
+            return address(this).balance;
+        } else {
+            return IERC20(tokenAddress).balanceOf(address(this));
+        }
+    }
+    
+    // Receive function to accept ETH
+    receive() external payable {
+        // Allow contract to receive ETH
     }
 }
