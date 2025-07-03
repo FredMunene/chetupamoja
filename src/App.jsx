@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { ConnectWallet, useAddress } from "@thirdweb-dev/react";
 import { ArrowRight, Heart, Wallet, CheckCircle, ArrowLeft, Mail, Building, User, MessageSquare, Phone, Globe } from 'lucide-react';
 import { ethers } from 'ethers';
+import { client } from "./thirdwebClient";
 
 const CAMPAIGN = {
   title: "Support STEM Showcases in Kisumu & Nakuru",
@@ -26,7 +28,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState('home'); // 'home', 'donate', or 'organization'
   
   // Donation page state
-  const [account, setAccount] = useState(null);
+  const address = useAddress();
   const [projectId, setProjectId] = useState("1");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
@@ -80,7 +82,6 @@ function App() {
         params: [{ chainId: BASE_SEPOLIA_CHAIN_ID }],
       });
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-      setAccount(accounts[0]);
     } catch (err) {
       setStatus("Could not connect wallet or switch network.");
     }
@@ -145,7 +146,7 @@ function App() {
 
   useEffect(() => {
     async function fetchUserContribution() {
-      if (!account || !projectId) {
+      if (!address || !projectId) {
         setUserContribution(null);
         return;
       }
@@ -157,7 +158,7 @@ function App() {
       }
     }
     fetchUserContribution();
-  }, [account, projectId]);
+  }, [address, projectId]);
 
   // Sync ETH and USD input fields
   useEffect(() => {
@@ -896,7 +897,7 @@ function App() {
               <div className="border-t border-gray-200 pt-6 space-y-6">
                 <div>
                   <h4 className="font-semibold mb-2">Your Contribution</h4>
-                  {account && userContribution !== null ? (
+                  {address && userContribution !== null ? (
                     <div className="text-orange-600 font-bold">{userContribution} ETH</div>
                   ) : (
                     <div className="text-gray-500 text-sm">Connect wallet to see</div>
@@ -904,17 +905,16 @@ function App() {
                 </div>
 
                 {/* Wallet Connection */}
-                {!account ? (
-                  <button 
-                    onClick={connectWallet} 
-                    className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl hover:bg-orange-600 transition-colors"
-                  >
-                    Connect Wallet
-                  </button>
+                {!address ? (
+                  <ConnectWallet client={client}
+                  appMetadata={{
+                    name: "ChetuPamoja",
+                    url: "https://www.chetupamoja.co.ke",
+                  }}className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl hover:bg-orange-600 transition-colors" />
                 ) : (
                   <div className="space-y-4">
                     <div className="text-sm text-green-600 font-medium">
-                      ✓ Wallet Connected: {account.slice(0, 6)}...{account.slice(-4)}
+                      ✓ Wallet Connected: {address.slice(0, 6)}...{address.slice(-4)}
                     </div>
                     
                     {/* Amount Inputs */}
@@ -950,7 +950,7 @@ function App() {
                     {/* Donate Button */}
                     <button 
                       onClick={donate} 
-                      disabled={!account || !inputEth || !projectId || loading}
+                      disabled={!address || !inputEth || !projectId || loading}
                       className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {loading ? (
