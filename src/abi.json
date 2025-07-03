@@ -1314,7 +1314,7 @@
 	},
 	"settings": {
 		"compilationTarget": {
-			"contracts/4_Donation.sol": "ProjectDonationContractWithNFT"
+			"contracts/9_mint.sol": "ProjectDonationContractWithNFT"
 		},
 		"evmVersion": "prague",
 		"libraries": {},
@@ -1376,7 +1376,7 @@
 				"dweb:/ipfs/Qmax9WHBnVsZP46ZxEMNRQpLQnrdE4dK8LehML1Py8FowF"
 			]
 		},
-		"contracts/4_Donation.sol": {
+		"contracts/9_mint.sol": {
 			"keccak256": "0xfae2a81822bc346f7a9c47098fe2e0f2f371fe386b1964015f56bb0cd47de060",
 			"license": "MIT",
 			"urls": [
