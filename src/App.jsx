@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ConnectWallet, useAddress, useContract, useContractRead } from "@thirdweb-dev/react";
+import { ConnectWallet, useAddress, useContract, useContractRead,useContractWrite } from "@thirdweb-dev/react";
 import { ArrowRight, Heart, Wallet, CheckCircle, ArrowLeft, Mail, Building, User, MessageSquare, Phone, Globe } from 'lucide-react';
 import { ethers } from 'ethers';
 import { client } from "./thirdwebClient";
@@ -17,9 +17,18 @@ const CAMPAIGN = {
   tagline: "Donate once, help many — quick, direct, and impactful.",
 };
 
-const CONTRACT_ADDRESS = "0x6d5fdc15dc47254f266a90772bd8a12f849faf12";
-const BASE_SEPOLIA_CHAIN_ID = "0x14A34"; // 927,076 decimal
-const DONATION_GOAL = 3000; // USD
+// Constants
+const CONSTANTS = {
+  MEAL_COST: 0.5,
+  DONATION_GOAL: 3000,
+  MIN_DONATION_USD: 0.01,
+  MIN_DONATION_ETH: 0.0001,
+  CONTRACT_ADDRESS: "0x5b3ecb40d4DeEbA3aDB33A0BFBd7d252fe47715B",
+  BASE_SEPOLIA_CHAIN_ID: "0x14A34", // 84532 decimal
+  FALLBACK_ETH_PRICE: 2500
+};
+
+
 
 // Font size constants
 const FONT_LARGE = 28;
@@ -38,6 +47,9 @@ function App() {
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [inputEth, setInputEth] = useState("");
   const [inputUsd, setInputUsd] = useState("");
+  const [networkError, setNetworkError] = useState(false);
+  
+  const [ethPrice, setEthPrice] = useState(null);
   
   // Interactive impact calculator state - moved to top level
   const [mealsPerDay, setMealsPerDay] = useState(1);
@@ -62,41 +74,28 @@ function App() {
   // Mock ABI for demo purposes
   const abi = abiJson.output.abi;
 
+  console.log(abi);
+
   // Read contract data using thirdweb hooks
-  const { contract } = useContract(CONTRACT_ADDRESS, abi);
+  const { contract } = useContract(CONSTANTS.CONTRACT_ADDRESS, abi);
   const { data: projectInfo } = useContractRead(contract, "getProjectInfo", [projectId]);
   const { data: donorAmount } = useContractRead(contract, "getDonorAmount", [projectId, address]);
   const { data: donors } = useContractRead(contract, "getProjectDonors", [projectId]);
-  const { data: deposits, error: depositsError } = useContractRead(contract, "getProjectDeposits", [projectId]);
-  const numDeposits = deposits ? deposits.length : 0;
+  const { data: deposits } = useContractRead(contract, "getProjectDeposits", [projectId]);
+  
 
-  // For total donated
-  const totalDonated = projectInfo && projectInfo[1]
-    ? ethers.utils.formatEther(projectInfo[1])
-    : "0";
 
-  // For user contribution
-  const userContribution = donorAmount ? ethers.utils.formatEther(donorAmount) : "0";
+    // Contract write hook for donations
+    const { mutateAsync: depositETH, isLoading: donationLoading } = useContractWrite(contract, "depositETH");
 
-  const [ethPrice, setEthPrice] = useState(null);
 
-  async function connectWallet() {
-    if (!window.ethereum) {
-      alert("MetaMask is required.");
-      return;
-    }
-    try {
-      // Switch to Base Sepolia
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: BASE_SEPOLIA_CHAIN_ID }],
-      });
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-    } catch (err) {
-      setStatus("Could not connect wallet or switch network.");
-    }
-  }
+    const totalDonated = projectInfo && projectInfo[1] ? ethers.utils.formatEther(projectInfo[1]) : "0";
+    const userContribution = donorAmount ? ethers.utils.formatEther(donorAmount) : "0";
+    const numDeposits = deposits ? deposits.length : 0;
 
+
+
+  // Fetch ETH price
   useEffect(() => {
     let interval;
     async function fetchEthPrice() {
@@ -104,12 +103,14 @@ function App() {
         const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
         const data = await res.json();
         setEthPrice(data.ethereum.usd);
-      } catch {
-        setEthPrice(2500); // Fallback price
+      } catch (error) {
+        console.error("Failed to fetch ETH price:", error);
+        setEthPrice(CONSTANTS.FALLBACK_ETH_PRICE);
       }
     }
+    
     fetchEthPrice();
-    interval = setInterval(fetchEthPrice, 60000); // Fetch every 1 minute
+    interval = setInterval(fetchEthPrice, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -126,20 +127,89 @@ function App() {
     }
   }, [inputEth, inputUsd]);
 
-  const handleDonate = async () => {
+
+   // Network validation
+   const validateNetwork = async () => {
+    if (!window.ethereum) {
+      setNetworkError(true);
+      setStatus("MetaMask not detected. Please install MetaMask.");
+      return false;
+    }
+
     try {
-      // Example: deposit 0.01 ETH to projectId 1
-      await depositETH({
-        args: [1], // projectId
-        overrides: {
-          value: ethers.utils.parseEther("0.01"), // amount in ETH
-        },
-      });
-      alert("Donation successful!");
-    } catch (err) {
-      alert("Donation failed: " + err.message);
+      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      if (chainId !== CONSTANTS.BASE_SEPOLIA_CHAIN_ID) {
+        setNetworkError(true);
+        setStatus("Please switch to Base Sepolia network.");
+        
+        // Attempt to switch network
+        try {
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: CONSTANTS.BASE_SEPOLIA_CHAIN_ID }],
+          });
+          setNetworkError(false);
+          setStatus("");
+          return true;
+        } catch (switchError) {
+          console.error("Failed to switch network:", switchError);
+          return false;
+        }
+      }
+      
+      setNetworkError(false);
+      return true;
+    } catch (error) {
+      console.error("Network validation error:", error);
+      setNetworkError(true);
+      setStatus("Failed to validate network connection.");
+      return false;
     }
   };
+
+// Handle donation
+const handleDonate = async () => {
+  if (!address) {
+    setStatus("Please connect your wallet first");
+    return;
+  }
+
+  if (!validateDonationAmount()) return;
+
+  const networkValid = await validateNetwork();
+  if (!networkValid) return;
+
+  setLoading(true);
+  setStatus("Processing donation...");
+
+  try {
+    const ethAmount = ethers.utils.parseEther(inputEth);
+    
+    await depositETH({
+      args: [projectId],
+      overrides: {
+        value: ethAmount,
+      },
+    });
+
+    setStatus("Donation successful! Thank you for your contribution.");
+    setInputEth("");
+    setInputUsd("");
+    
+  } catch (error) {
+    console.error("Donation failed:", error);
+    
+    if (error.message.includes("user rejected")) {
+      setStatus("Donation cancelled by user.");
+    } else if (error.message.includes("insufficient funds")) {
+      setStatus("Insufficient funds in wallet.");
+    } else {
+      setStatus(`Donation failed: ${error.message.substring(0, 100)}...`);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleOrgFormSubmit = async (e) => {
     e.preventDefault();
