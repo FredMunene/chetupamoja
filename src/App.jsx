@@ -275,16 +275,22 @@ function App() {
       const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer);
       const tx = await contract.depositETH(projectId, { value: ethers.utils.parseEther(inputEth) });
       await tx.wait();
-      // Simulate donation process for demo
-      // await new Promise(resolve => setTimeout(resolve, 3000));
+      
       setStatus("Donation successful! Thank you.");
       setInputEth("");
       setInputUsd("");
       fetchTotalDonated(); // Refresh total after donation
+      
+      // Wait 3 seconds before reactivating the button
+      setTimeout(() => {
+        setLoading(false);
+        setStatus(""); // Clear success message
+      }, 3000);
+      
     } catch (err) {
       setStatus("Error: " + (err.reason || err.message || "Transaction failed"));
+      setLoading(false); // Reset loading state immediately on error
     }
-    setLoading(false);
   }
 
   const handleOrgFormSubmit = async (e) => {
