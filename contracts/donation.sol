@@ -20,6 +20,7 @@ interface IDonationNFT {
         address recipient,
         uint256 projectId,
         string memory projectName,
+        string memory image,
         uint256 donationAmount
     ) external returns (uint256 tokenId);
     
@@ -27,12 +28,14 @@ interface IDonationNFT {
         address recipient,
         uint256 projectId,
         string memory projectName,
+        string memory image,
         uint256 donationAmount
     ) external returns (uint256 tokenId);
     
     function endCampaignAndMintTiers(
         uint256 projectId,
         string memory projectName,
+        string memory image,
         address[] calldata sortedDonors,
         uint256[] calldata sortedAmounts
     ) external;
@@ -69,6 +72,7 @@ contract ProjectDonationContractWithNFT is ReentrancyGuard, Ownable, Pausable {
         bool active;
         uint256 createdAt;
         uint256 endTime; // Campaign end time
+        string imageUrl;
         bool campaignEnded;
         address[] donors; // Array of unique donors
         mapping(address => uint256) donorTotalAmount; // Total donated by each donor
@@ -161,6 +165,7 @@ contract ProjectDonationContractWithNFT is ReentrancyGuard, Ownable, Pausable {
      */
     function createProject(
         string memory name,
+        string memory imageUrl,
         uint256 durationDays
     ) external onlyOwner returns (uint256 projectId) {
         require(bytes(name).length > 0, "Project name required");
@@ -175,6 +180,7 @@ contract ProjectDonationContractWithNFT is ReentrancyGuard, Ownable, Pausable {
         newProject.totalWithdrawn = 0;
         newProject.active = true;
         newProject.createdAt = block.timestamp;
+        newProject.imageUrl = imageUrl;
         newProject.endTime = endTime;
         newProject.campaignEnded = false;
         newProject.firstChampionAmount = 0;
@@ -362,14 +368,14 @@ contract ProjectDonationContractWithNFT is ReentrancyGuard, Ownable, Pausable {
         
         // Check for First Champion (first depositor)
         if (!hasFirstChampion && project.donors.length == 1) {
-            donationNFT.mintFirstChampion(depositor, projectId, project.name, newTotalAmount);
+            donationNFT.mintFirstChampion(depositor, projectId, project.name, project.imageUrl, newTotalAmount);
             project.firstChampionAmount = newTotalAmount;
             
             emit FirstChampionAwarded(projectId, depositor, newTotalAmount);
         }
         // Check for Stealth Ninja (first donation larger than first champion)
         else if (hasFirstChampion && !hasStealthNinja && newTotalAmount > project.firstChampionAmount) {
-            donationNFT.mintStealthNinja(depositor, projectId, project.name, newTotalAmount);
+            donationNFT.mintStealthNinja(depositor, projectId, project.name, project.imageUrl, newTotalAmount);
             
             emit StealthNinjaAwarded(projectId, depositor, newTotalAmount);
         }
@@ -456,6 +462,7 @@ contract ProjectDonationContractWithNFT is ReentrancyGuard, Ownable, Pausable {
         donationNFT.endCampaignAndMintTiers(
             projectId,
             project.name,
+            project.imageUrl,
             sortedDonors,
             sortedAmounts
         );
