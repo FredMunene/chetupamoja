@@ -24,6 +24,44 @@ const FONT_LARGE = 28;
 const FONT_MEDIUM = 18;
 const FONT_SMALL = 15;
 
+// Dropdown component
+function Dropdown({ value, onChange, options, onClose }) {
+  return (
+    <div 
+      style={{
+        position: 'absolute',
+        top: '100%',
+        left: 0,
+        background: '#fff',
+        border: '1px solid #ff9800',
+        borderRadius: 8,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        zIndex: 1000,
+        minWidth: '100%'
+      }}
+    >
+      {options.map(option => (
+        <div
+          key={option}
+          style={{
+            padding: '8px 12px',
+            cursor: 'pointer',
+            borderBottom: '1px solid #eee',
+            background: value === option ? '#fff3e0' : '#fff',
+            fontWeight: value === option ? 700 : 400
+          }}
+          onClick={() => {
+            onChange(option);
+            onClose();
+          }}
+        >
+          {option}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function App() {
   const [currentPage, setCurrentPage] = useState('home'); // 'home', 'donate', or 'organization'
   
@@ -96,12 +134,19 @@ function App() {
         setTotalDonated(null);
         return;
       }
-      const providerEthers = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, providerEthers);
+
+      if (!window.ethereum) {
+        setTotalDonated(null);
+        return;
+      }
+
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, provider);
+      
       // getProjectInfo returns (name, totalDeposited, ...)
       const info = await contract.getProjectInfo(projectId);
       // info[1] is totalDeposited
-      setTotalDonated(ethers.formatEther(info[1]));
+      setTotalDonated(ethers.utils.formatEther(info[1]));
     } catch (err) {
       setTotalDonated(null);
     }
@@ -147,12 +192,12 @@ function App() {
       }
     }
     setDefaultAmount();
-    setNumDeposits(15); // Mock data
+    // setNumDeposits(15); // Mock data
 
     // Refresh ETH price every 20 seconds
     const interval = setInterval(() => {
       fetchEthPrice();
-    }, 20000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [projectId]);
 
@@ -163,8 +208,17 @@ function App() {
         return;
       }
       try {
-        // Mock user contribution
-        setUserContribution("0.1234");
+        if (!window.ethereum) {
+          setUserContribution(null);
+          return;
+        }
+
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, provider);
+        
+        const amount = await contract.getDonorAmount(projectId, address);
+        const ethAmount = ethers.utils.formatEther(amount);
+        setUserContribution(ethAmount);
       } catch (err) {
         setUserContribution(null);
       }
@@ -192,11 +246,14 @@ function App() {
         return;
       }
       try {
-        // Use the user's wallet if available, otherwise fallback to a public provider
-        const provider = window.ethereum
-          ? new ethers.BrowserProvider(window.ethereum)
-          : ethers.getDefaultProvider(); // fallback for read-only
+        if (!window.ethereum) {
+          setNumDeposits(null);
+          return;
+        }
+
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
         const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, provider);
+        
         const depositIds = await contract.getProjectDeposits(projectId);
         setNumDeposits(depositIds.length);
       } catch (err) {
@@ -213,13 +270,13 @@ function App() {
       if (!window.ethereum) throw new Error("MetaMask not found");
       if (!projectId) throw new Error("Project ID is required");
       // In real implementation, this would call the smart contract
-      // const provider = new ethers.BrowserProvider(window.ethereum);
-      // const signer = await provider.getSigner();
-      // const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer);
-      // const tx = await contract.depositETH(projectId, { value: ethers.parseEther(inputEth) });
-      // await tx.wait();
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer);
+      const tx = await contract.depositETH(projectId, { value: ethers.utils.parseEther(inputEth) });
+      await tx.wait();
       // Simulate donation process for demo
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      // await new Promise(resolve => setTimeout(resolve, 3000));
       setStatus("Donation successful! Thank you.");
       setInputEth("");
       setInputUsd("");
@@ -561,7 +618,7 @@ function App() {
         >
           <div className="relative max-w-4xl max-h-full">
             <img
-              src="public/images/techchallenge.jpg"
+              src="/images/techchallenge.jpg"
               alt="STEM Showcase Full"
               className="max-w-full max-h-full rounded-lg"
             />
