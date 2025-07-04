@@ -290,6 +290,11 @@
 						"type": "string"
 					},
 					{
+						"internalType": "string",
+						"name": "imageUrl",
+						"type": "string"
+					},
+					{
 						"internalType": "uint256",
 						"name": "durationDays",
 						"type": "uint256"
@@ -904,6 +909,11 @@
 						"type": "uint256"
 					},
 					{
+						"internalType": "string",
+						"name": "imageUrl",
+						"type": "string"
+					},
+					{
 						"internalType": "bool",
 						"name": "campaignEnded",
 						"type": "bool"
@@ -1077,7 +1087,7 @@
 			},
 			"kind": "dev",
 			"methods": {
-				"createProject(string,uint256)": {
+				"createProject(string,string,uint256)": {
 					"params": {
 						"durationDays": "Campaign duration in days (0 for default)",
 						"name": "Project name"
@@ -1242,7 +1252,7 @@
 		"userdoc": {
 			"kind": "user",
 			"methods": {
-				"createProject(string,uint256)": {
+				"createProject(string,string,uint256)": {
 					"notice": "Create a new project/donation campaign"
 				},
 				"depositERC20(address,uint256,uint256)": {
@@ -1314,7 +1324,7 @@
 	},
 	"settings": {
 		"compilationTarget": {
-			"contracts/9_mint.sol": "ProjectDonationContractWithNFT"
+			"contracts/5_Donation.sol": "ProjectDonationContractWithNFT"
 		},
 		"evmVersion": "prague",
 		"libraries": {},
@@ -1376,12 +1386,12 @@
 				"dweb:/ipfs/Qmax9WHBnVsZP46ZxEMNRQpLQnrdE4dK8LehML1Py8FowF"
 			]
 		},
-		"contracts/9_mint.sol": {
-			"keccak256": "0xfae2a81822bc346f7a9c47098fe2e0f2f371fe386b1964015f56bb0cd47de060",
+		"contracts/5_Donation.sol": {
+			"keccak256": "0x9aca5f07af27dbdf6a214144fa0a5df5358ab09a3c09ffcace2ea0c934755d71",
 			"license": "MIT",
 			"urls": [
-				"bzz-raw://9bd96d3f49c396cf3c83759202133a7c6738326fdbd7285a396b3a7342d9a40e",
-				"dweb:/ipfs/QmVTg161HoWu5zE51hJreLtw58bacTzBUNpV3PGk9Wts7g"
+				"bzz-raw://d9f199bd1851ee94d189c85f08d608e306fe373649ed9999876b3e1c7e31aec9",
+				"dweb:/ipfs/QmPj7pBPcfez8WqyAx33dCiTQyfPghmN7RSDT3pJdJVofj"
 			]
 		}
 	},
