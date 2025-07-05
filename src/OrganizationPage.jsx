@@ -17,21 +17,6 @@ function OrganizationPage() {
     country: '',
     estimatedDonationVolume: ''
   });
-  const [formSubmitting, setFormSubmitting] = useState(false);
-  const [formSubmitted, setFormSubmitted] = useState(false);
-
-  const handleOrgFormSubmit = async (e) => {
-    e.preventDefault();
-    setFormSubmitting(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setFormSubmitted(true);
-    } catch (error) {
-      console.error('Form submission error:', error);
-    } finally {
-      setFormSubmitting(false);
-    }
-  };
 
   const handleOrgFormChange = (field, value) => {
     setOrgForm(prev => ({
@@ -40,68 +25,50 @@ function OrganizationPage() {
     }));
   };
 
-  const resetOrgForm = () => {
-    setOrgForm({
-      organizationName: '',
-      contactName: '',
-      email: '',
-      phone: '',
-      website: '',
-      organizationType: '',
-      message: '',
-      country: '',
-      estimatedDonationVolume: ''
-    });
-    setFormSubmitted(false);
+  const handleSendEmail = () => {
+    // Create email content
+    const subject = `Organization Application: ${orgForm.organizationName}`;
+    
+    const emailBody = `
+Dear ChetuPamoja Team,
+
+I am writing to express interest in partnering with ChetuPamoja as an organization.
+
+Organization Details:
+- Organization Name: ${orgForm.organizationName}
+- Contact Person: ${orgForm.contactName}
+- Email: ${orgForm.email}
+- Phone: ${orgForm.phone || 'Not provided'}
+- Website: ${orgForm.website || 'Not provided'}
+- Organization Type: ${orgForm.organizationType}
+- Country: ${orgForm.country}
+- Estimated Monthly Donation Volume: ${orgForm.estimatedDonationVolume || 'Not specified'}
+
+About Our Organization:
+${orgForm.message}
+
+I look forward to hearing from you.
+
+Best regards,
+${orgForm.contactName}
+${orgForm.organizationName}
+    `.trim();
+
+    // Create mailto link
+    const mailtoLink = `mailto:chetupamoja@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
+    
+    // Open email client
+    window.open(mailtoLink);
   };
 
-  if (formSubmitted) {
-    return (
-      <div className="min-h-screen bg-white text-black font-mono">
-        <div className="container mx-auto px-8 py-16">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-16">
-            <button
-              onClick={() => navigate('/')}
-              className="flex items-center gap-2 text-sm opacity-60 hover:opacity-100 transition-opacity"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Home
-            </button>
-            <h1 className="text-2xl font-bold">ChetuPamoja</h1>
-            <div className="w-20"></div>
-          </div>
-
-          <div className="max-w-2xl mx-auto text-center space-y-8">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-              <Building className="w-10 h-10 text-green-600" />
-            </div>
-            <h1 className="text-3xl font-bold text-green-600">Application Submitted!</h1>
-            <p className="text-lg text-gray-600">
-              Thank you for your interest in partnering with ChetuPamoja. We've received your application and will review it within 2-3 business days.
-            </p>
-            <p className="text-gray-600">
-              We'll contact you at <span className="font-semibold">{orgForm.email}</span> with next steps.
-            </p>
-            <div className="flex gap-4 justify-center pt-8">
-              <button
-                onClick={() => navigate('/')}
-                className="px-8 py-3 bg-black text-white font-medium rounded-lg hover:bg-gray-800 transition-colors"
-              >
-                Return Home
-              </button>
-              <button
-                onClick={resetOrgForm}
-                className="px-8 py-3 border-2 border-black text-black font-medium rounded-lg hover:bg-black hover:text-white transition-colors"
-              >
-                Submit Another
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const isFormValid = () => {
+    return orgForm.organizationName && 
+           orgForm.contactName && 
+           orgForm.email && 
+           orgForm.organizationType && 
+           orgForm.country && 
+           orgForm.message;
+  };
 
   return (
     <div className="min-h-screen bg-white text-black font-mono">
@@ -160,7 +127,7 @@ function OrganizationPage() {
           <div className="bg-gray-50 rounded-2xl p-8">
             <h2 className="text-2xl font-bold mb-8 text-center">Organization Application</h2>
             
-            <form onSubmit={handleOrgFormSubmit} className="space-y-6">
+            <div className="space-y-6">
               <div className="grid md:grid-cols-2 gap-6">
                 {/* Organization Name */}
                 <div>
@@ -319,24 +286,18 @@ function OrganizationPage() {
               {/* Submit Button */}
               <div className="text-center pt-6">
                 <button
-                  type="submit"
-                  disabled={formSubmitting}
+                  onClick={handleSendEmail}
+                  disabled={!isFormValid()}
                   className="px-12 py-4 bg-orange-500 text-white font-bold rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
                 >
-                  {formSubmitting ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      Submitting...
-                    </>
-                  ) : (
-                    <>
-                      <Building className="w-5 h-5" />
-                      Submit Application
-                    </>
-                  )}
+                  <Mail className="w-5 h-5" />
+                  Send Application Email
                 </button>
+                <p className="text-sm text-gray-600 mt-4">
+                  This will open your default email client with a pre-filled application email to chetupamoja@gmail.com
+                </p>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       </div>
