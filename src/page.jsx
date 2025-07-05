@@ -9,8 +9,7 @@ export default function HomePage() {
   };
 
   const handleOrgClick = () => {
-    // Scroll to organizations section
-    document.getElementById('organizations')?.scrollIntoView({ behavior: 'smooth' });
+    navigate('/organization');
   };
 
   return (
@@ -112,7 +111,7 @@ export default function HomePage() {
       </section>
 
       {/* For Organizations */}
-      <section id="organizations" className="py-32 px-8 bg-gray-50">
+      <section className="py-32 px-8 bg-gray-50">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-4xl md:text-5xl font-bold text-center mb-20">For Organizations</h2>
 
