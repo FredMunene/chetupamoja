@@ -1,6 +1,17 @@
-import Link from "next/link"
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
-export default function Home() {
+export default function HomePage() {
+  const navigate = useNavigate();
+
+  const handleDonateClick = () => {
+    navigate('/donate');
+  };
+
+  const handleOrgClick = () => {
+    navigate('/organization');
+  };
+
   return (
     <div className="min-h-screen bg-white text-black font-mono">
       {/* Hero Section */}
@@ -11,17 +22,19 @@ export default function Home() {
           <p className="text-2xl md:text-3xl font-light tracking-wide">Give Crypto. Change Lives. Together.</p>
 
           <div className="flex flex-col sm:flex-row gap-6 justify-center pt-8">
-            <Link href="/donate">
-              <button className="px-12 py-4 bg-black text-white font-medium tracking-wide hover:bg-gray-800 transition-colors">
-                DONATE NOW
-              </button>
-            </Link>
+            <button 
+              onClick={handleDonateClick}
+              className="px-12 py-4 bg-black text-white font-medium tracking-wide hover:bg-gray-800 transition-colors"
+            >
+              DONATE NOW
+            </button>
 
-            <Link href="#organizations">
-              <button className="px-12 py-4 border-2 border-black text-black font-medium tracking-wide hover:bg-black hover:text-white transition-colors">
-                FOR ORGANIZATIONS
-              </button>
-            </Link>
+            <button 
+              onClick={handleOrgClick}
+              className="px-12 py-4 border-2 border-black text-black font-medium tracking-wide hover:bg-black hover:text-white transition-colors"
+            >
+              FOR ORGANIZATIONS
+            </button>
           </div>
         </div>
       </section>
@@ -98,7 +111,7 @@ export default function Home() {
       </section>
 
       {/* For Organizations */}
-      <section id="organizations" className="py-32 px-8 bg-gray-50">
+      <section className="py-32 px-8 bg-gray-50">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-4xl md:text-5xl font-bold text-center mb-20">For Organizations</h2>
 
@@ -129,17 +142,19 @@ export default function Home() {
           <p className="text-xl md:text-2xl font-light">ChetuPamoja == Collective Ownership</p>
 
           <div className="flex flex-col sm:flex-row gap-6 justify-center pt-8">
-            <Link href="/donate">
-              <button className="px-12 py-4 bg-black text-white font-medium tracking-wide hover:bg-gray-800 transition-colors">
-                START GIVING
-              </button>
-            </Link>
+            <button 
+              onClick={handleDonateClick}
+              className="px-12 py-4 bg-black text-white font-medium tracking-wide hover:bg-gray-800 transition-colors"
+            >
+              START GIVING
+            </button>
 
-            <Link href="#organizations">
-              <button className="px-12 py-4 border-2 border-black text-black font-medium tracking-wide hover:bg-black hover:text-white transition-colors">
-                JOIN AS ORG
-              </button>
-            </Link>
+            <button 
+              onClick={handleOrgClick}
+              className="px-12 py-4 border-2 border-black text-black font-medium tracking-wide hover:bg-black hover:text-white transition-colors"
+            >
+              JOIN AS ORG
+            </button>
           </div>
         </div>
       </section>
@@ -151,5 +166,5 @@ export default function Home() {
         </p>
       </footer>
     </div>
-  )
+  );
 }
