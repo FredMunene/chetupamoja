@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Heart, Wallet, CheckCircle, ArrowLeft, Mail, Building, User, MessageSquare, Phone, Globe } from 'lucide-react';
-import { ethers } from 'ethers';
+import { Heart, ArrowLeft } from 'lucide-react';
+import { BrowserProvider, Contract, formatUnits, parseUnits } from "ethers";
 import { useNavigate } from 'react-router-dom';
+import { useWallet } from './contexts/WalletContext';
+import { useAppKitProvider, useAppKitAccount } from "@reown/appkit/react";
 
 const CAMPAIGN = {
   title: "Support STEM Showcases in Kisumu & Nakuru",
@@ -14,7 +16,7 @@ const CAMPAIGN = {
   tagline: "Donate once, help many — quick, direct, and impactful.",
 };
 
-const CONTRACT_ADDRESS =  "0x9dF718fd49ae6641217d15eeff97eb61088611Cf";
+const CONTRACT_ADDRESS = "0x9dF718fd49ae6641217d15eeff97eb61088611Cf";
 const LISK_CHAIN_ID = "0x46f"; // 1135 decimal
 const DONATION_GOAL = 3000; // USD
 
@@ -26,7 +28,7 @@ const FONT_SMALL = 15;
 // Dropdown component
 function Dropdown({ value, onChange, options, onClose }) {
   return (
-    <div 
+    <div
       style={{
         position: 'absolute',
         top: '100%',
@@ -63,40 +65,30 @@ function Dropdown({ value, onChange, options, onClose }) {
 
 function DonatePage() {
   const navigate = useNavigate();
-  
+  const { walletAddress, isConnected, connectWallet, isLoading: walletLoading } = useWallet();
+  const { address, isConnected: appKitConnected } = useAppKitAccount();
+  const { walletProvider } = useAppKitProvider();
+
+  // Use AppKit's connection state and address
+  const connectedAddress = address || walletAddress;
+  const connected = appKitConnected || isConnected;
+
   // Donation page state
-  const [address, setAddress] = useState("");
   const [projectId, setProjectId] = useState("1");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [totalDonated, setTotalDonated] = useState(null);
   const [ethPrice, setEthPrice] = useState(null);
   const [userContribution, setUserContribution] = useState(null);
-  const [recentDonations, setRecentDonations] = useState([]);
   const [numDeposits, setNumDeposits] = useState(null);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [inputEth, setInputEth] = useState("");
   const [inputUsd, setInputUsd] = useState("");
-  
-  // Interactive impact calculator state - moved to top level
+
+  // Interactive impact calculator state
   const [mealsPerDay, setMealsPerDay] = useState(1);
   const [days, setDays] = useState(1);
   const [dropdownOpen, setDropdownOpen] = useState(null);
-
-  // Organization form state
-  const [orgForm, setOrgForm] = useState({
-    organizationName: '',
-    contactName: '',
-    email: '',
-    phone: '',
-    website: '',
-    organizationType: '',
-    message: '',
-    country: '',
-    estimatedDonationVolume: ''
-  });
-  const [formSubmitting, setFormSubmitting] = useState(false);
-  const [formSubmitted, setFormSubmitted] = useState(false);
 
   // Minimal ABI for ethers.js
   const abi = [
@@ -107,225 +99,196 @@ function DonatePage() {
     "function getProjectDeposits(uint256 projectId) external view returns (uint256[])"
   ];
 
-  async function connectWallet() {
-    if (!window.ethereum) {
-      alert("MetaMask is required.");
-      return;
-    }
-    try {
-      // Switch to Lisk
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: LISK_CHAIN_ID }],
-      });
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-      if (accounts && accounts.length > 0) {
-        setAddress(accounts[0]);
-      }
-    } catch (err) {
-      setStatus("Could not connect wallet or switch network.");
-    }
-  }
-
   async function fetchTotalDonated() {
     try {
-      if (!projectId) {
+      if (!projectId || !walletProvider) {
         setTotalDonated(null);
         return;
       }
 
-      if (!window.ethereum) {
-        setTotalDonated(null);
-        return;
-      }
+      const ethersProvider = new BrowserProvider(walletProvider);
+      const contract = new Contract(CONTRACT_ADDRESS, abi, ethersProvider);
 
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, provider);
-      
       // getProjectInfo returns (name, totalDeposited, ...)
       const info = await contract.getProjectInfo(projectId);
       // info[1] is totalDeposited
-      setTotalDonated(ethers.utils.formatEther(info[1]));
+      setTotalDonated(formatUnits(info[1], 18));
     } catch (err) {
+      console.error("Error fetching total donated:", err);
       setTotalDonated(null);
     }
   }
 
   async function fetchEthPrice() {
     try {
-      const cached = localStorage.getItem('ethPriceCache');
+      // Try to get cached price first
+      const cached = sessionStorage.getItem('ethPriceCache');
       if (cached) {
         const { price, timestamp } = JSON.parse(cached);
-        if (Date.now() - timestamp < 60000) { // 1 minute
+        if (Date.now() - timestamp < 60000) { // 1 minute cache
           setEthPrice(price);
           return;
         }
       }
+
       const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
       const data = await res.json();
-      setEthPrice(data.ethereum.usd);
-      localStorage.setItem('ethPriceCache', JSON.stringify({ price: data.ethereum.usd, timestamp: Date.now() }));
-    } catch {
+      const price = data.ethereum.usd;
+      setEthPrice(price);
+
+      // Cache the price
+      sessionStorage.setItem('ethPriceCache', JSON.stringify({
+        price,
+        timestamp: Date.now()
+      }));
+    } catch (err) {
+      console.error("Error fetching ETH price:", err);
       setEthPrice(2500); // Fallback price
     }
   }
 
+  async function fetchUserContribution() {
+    if (!connectedAddress || !projectId || !walletProvider) {
+      setUserContribution(null);
+      return;
+    }
+
+    try {
+      const ethersProvider = new BrowserProvider(walletProvider);
+      const contract = new Contract(CONTRACT_ADDRESS, abi, ethersProvider);
+
+      const amount = await contract.getDonorAmount(projectId, connectedAddress);
+      setUserContribution(formatUnits(amount, 18));
+    } catch (err) {
+      console.error("Error fetching user contribution:", err);
+      setUserContribution(null);
+    }
+  }
+
+  async function fetchNumDeposits() {
+    if (!projectId || !walletProvider) {
+      setNumDeposits(null);
+      return;
+    }
+
+    try {
+      const ethersProvider = new BrowserProvider(walletProvider);
+      const contract = new Contract(CONTRACT_ADDRESS, abi, ethersProvider);
+
+      const depositIds = await contract.getProjectDeposits(projectId);
+      setNumDeposits(depositIds.length);
+    } catch (err) {
+      console.error("Error fetching deposits:", err);
+      setNumDeposits(null);
+    }
+  }
+
+  // const disconnectWallet = () => {
+  //   if (walletProvider?.disconnect) {
+  //   walletProvider.disconnect();
+  //   }
+  // };
+
+  // Initialize data on component mount
   useEffect(() => {
-    fetchTotalDonated();
     fetchEthPrice();
-    // Set default amount to $0.5 in ETH after fetching price
-    async function setDefaultAmount() {
+
+    // Set default amount to $0.5 in ETH
+    const setDefaultAmount = async () => {
       try {
         const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");
         const data = await res.json();
         const ethPrice = data.ethereum.usd || 2500;
-        if (ethPrice) {
-          const ethAmount = (0.5 / ethPrice).toFixed(6);
-          setInputEth(ethAmount);
-          setInputUsd("0.50");
-        }
+        const ethAmount = (0.5 / ethPrice).toFixed(6);
+        setInputEth(ethAmount);
+        setInputUsd("0.50");
       } catch {
         const ethAmount = (0.5 / 2500).toFixed(6);
         setInputEth(ethAmount);
         setInputUsd("0.50");
       }
-    }
+    };
+
     setDefaultAmount();
-    // setNumDeposits(15); // Mock data
 
-    // Refresh ETH price every 20 seconds
-    const interval = setInterval(() => {
-      fetchEthPrice();
-    }, 60000);
+    // Refresh ETH price every minute
+    const interval = setInterval(fetchEthPrice, 60000);
     return () => clearInterval(interval);
-  }, [projectId]);
+  }, []);
 
+  // Fetch contract data when wallet provider is available
   useEffect(() => {
-    async function fetchUserContribution() {
-      if (!address || !projectId) {
-        setUserContribution(null);
-        return;
-      }
-      try {
-        if (!window.ethereum) {
-          setUserContribution(null);
-          return;
-        }
-
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, provider);
-        
-        const amount = await contract.getDonorAmount(projectId, address);
-        const ethAmount = ethers.utils.formatEther(amount);
-        setUserContribution(ethAmount);
-      } catch (err) {
-        setUserContribution(null);
-      }
+    if (walletProvider) {
+      fetchTotalDonated();
+      fetchNumDeposits();
     }
+  }, [walletProvider, projectId]);
+
+  // Fetch user contribution when address changes
+  useEffect(() => {
     fetchUserContribution();
-  }, [address, projectId]);
+  }, [connectedAddress, projectId, walletProvider]);
 
   // Sync ETH and USD input fields
   useEffect(() => {
     if (!ethPrice) return;
-    // If ETH input changes, update USD
-    if (inputEth !== "" && document.activeElement && document.activeElement.name === "ethInput") {
-      setInputUsd((parseFloat(inputEth) * ethPrice).toFixed(2));
-    }
-    // If USD input changes, update ETH
-    if (inputUsd !== "" && document.activeElement && document.activeElement.name === "usdInput") {
-      setInputEth((parseFloat(inputUsd) / ethPrice).toFixed(6));
+
+    const activeElement = document.activeElement;
+    if (activeElement) {
+      if (inputEth !== "" && activeElement.name === "ethInput") {
+        setInputUsd((parseFloat(inputEth) * ethPrice).toFixed(2));
+      }
+      if (inputUsd !== "" && activeElement.name === "usdInput") {
+        setInputEth((parseFloat(inputUsd) / ethPrice).toFixed(6));
+      }
     }
   }, [inputEth, inputUsd, ethPrice]);
 
-  useEffect(() => {
-    async function fetchNumDeposits() {
-      if (!projectId) {
-        setNumDeposits(null);
-        return;
-      }
-      try {
-        if (!window.ethereum) {
-          setNumDeposits(null);
-          return;
-        }
-
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, provider);
-        
-        const depositIds = await contract.getProjectDeposits(projectId);
-        setNumDeposits(depositIds.length);
-      } catch (err) {
-        setNumDeposits(null);
-      }
-    }
-    fetchNumDeposits();
-  }, [projectId, totalDonated]);
-
   async function donate() {
+    if (!walletProvider || !connectedAddress) {
+      setStatus("Please connect your wallet first");
+      return;
+    }
+
     setStatus("");
     setLoading(true);
+
     try {
-      if (!window.ethereum) throw new Error("MetaMask not found");
       if (!projectId) throw new Error("Project ID is required");
-      // In real implementation, this would call the smart contract
-      const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer);
-      const tx = await contract.depositETH(projectId, { value: ethers.utils.parseEther(inputEth) });
+      if (!inputEth || parseFloat(inputEth) <= 0) throw new Error("Invalid ETH amount");
+
+      const ethersProvider = new BrowserProvider(walletProvider);
+      const signer = await ethersProvider.getSigner();
+      const contract = new Contract(CONTRACT_ADDRESS, abi, signer);
+
+      const tx = await contract.depositETH(projectId, {
+        value: parseUnits(inputEth, 18)
+      });
+
+      setStatus("Transaction submitted. Waiting for confirmation...");
       await tx.wait();
-      
+
       setStatus("Donation successful! Thank you.");
       setInputEth("");
       setInputUsd("");
-      fetchTotalDonated(); // Refresh total after donation
-      
-      // Wait 3 seconds before reactivating the button
+
+      // Refresh data after successful donation
+      fetchTotalDonated();
+      fetchNumDeposits();
+      fetchUserContribution();
+
+      // Clear status after 3 seconds
       setTimeout(() => {
-        setLoading(false);
-        setStatus(""); // Clear success message
+        setStatus("");
       }, 3000);
-      
+
     } catch (err) {
+      console.error("Donation error:", err);
       setStatus("Error: " + (err.reason || err.message || "Transaction failed"));
-      setLoading(false); // Reset loading state immediately on error
+    } finally {
+      setLoading(false);
     }
   }
-
-  const handleOrgFormSubmit = async (e) => {
-    e.preventDefault();
-    setFormSubmitting(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setFormSubmitted(true);
-    } catch (error) {
-      console.error('Form submission error:', error);
-    } finally {
-      setFormSubmitting(false);
-    }
-  };
-
-  const handleOrgFormChange = (field, value) => {
-    setOrgForm(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const resetOrgForm = () => {
-    setOrgForm({
-      organizationName: '',
-      contactName: '',
-      email: '',
-      phone: '',
-      website: '',
-      organizationType: '',
-      message: '',
-      country: '',
-      estimatedDonationVolume: ''
-    });
-    setFormSubmitted(false);
-  };
 
   function handleShare() {
     const shareUrl = window.location.href;
@@ -334,7 +297,7 @@ function DonatePage() {
         title: "Support STEM Showcases",
         text: "Join me in supporting STEM Showcases! Donate now.",
         url: shareUrl,
-      }).catch(() => {});
+      }).catch(() => { });
     } else {
       navigator.clipboard.writeText(shareUrl);
       alert("Link copied to clipboard!");
@@ -362,9 +325,9 @@ function DonatePage() {
             {/* Main Content */}
             <div className="lg:col-span-2 space-y-8">
               <h1 className="text-3xl md:text-4xl font-bold">{CAMPAIGN.title}</h1>
-              
+
               {/* Campaign Image */}
-              <div 
+              <div
                 className="relative bg-gray-100 rounded-2xl overflow-hidden aspect-video cursor-pointer group"
                 onClick={() => setImageModalOpen(true)}
               >
@@ -383,7 +346,7 @@ function DonatePage() {
               {/* Description */}
               <div className="space-y-6">
                 <p className="text-lg leading-relaxed">{CAMPAIGN.description}</p>
-                
+
                 <ul className="space-y-2">
                   {CAMPAIGN.details.map((detail, i) => (
                     <li key={i} className="flex items-center gap-2">
@@ -392,7 +355,7 @@ function DonatePage() {
                     </li>
                   ))}
                 </ul>
-                
+
                 <p className="text-orange-600 font-bold text-lg">{CAMPAIGN.tagline}</p>
               </div>
 
@@ -402,7 +365,7 @@ function DonatePage() {
                   With <span className="font-bold text-orange-600">$0.50</span>, you can provide snacks for <span className="font-bold text-orange-600">1</span> student.
                 </div>
                 <div style={{ fontSize: FONT_MEDIUM, fontWeight: 700, color: '#111', margin: '24px 0 0 0', display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-                  With the total donated, you can provide
+                  With your donation, you can provide
                   <span
                     style={{
                       fontWeight: 700,
@@ -416,20 +379,18 @@ function DonatePage() {
                       display: 'inline-flex',
                       alignItems: 'center',
                       transition: 'background 0.2s',
+                      position: 'relative'
                     }}
                     onClick={() => setDropdownOpen(dropdownOpen === 'meals' ? null : 'meals')}
                   >
-                    {dropdownOpen === 'meals' ? (
+                    {mealsPerDay} meal{mealsPerDay > 1 ? 's' : ''} <span style={{ fontSize: 16, marginLeft: 2 }}>▼</span>
+                    {dropdownOpen === 'meals' && (
                       <Dropdown
                         value={mealsPerDay}
                         onChange={setMealsPerDay}
                         options={[1, 2]}
                         onClose={() => setDropdownOpen(null)}
                       />
-                    ) : (
-                      <>
-                        {mealsPerDay} meal{mealsPerDay > 1 ? 's' : ''} <span style={{ fontSize: 16, marginLeft: 2 }}>▼</span>
-                      </>
                     )}
                   </span>
                   per day for
@@ -446,24 +407,24 @@ function DonatePage() {
                       display: 'inline-flex',
                       alignItems: 'center',
                       transition: 'background 0.2s',
+                      position: 'relative'
                     }}
                     onClick={() => setDropdownOpen(dropdownOpen === 'days' ? null : 'days')}
                   >
-                    {dropdownOpen === 'days' ? (
+                    {days} day{days > 1 ? 's' : ''} <span style={{ fontSize: 16, marginLeft: 2 }}>▼</span>
+                    {dropdownOpen === 'days' && (
                       <Dropdown
                         value={days}
                         onChange={setDays}
                         options={[1, 2]}
                         onClose={() => setDropdownOpen(null)}
                       />
-                    ) : (
-                      <>
-                        {days} day{days > 1 ? 's' : ''} <span style={{ fontSize: 16, marginLeft: 2 }}>▼</span>
-                      </>
                     )}
                   </span>
                   to
-                  <span style={{ fontWeight: 700, color: '#ff9800', margin: '0 4px' }}>{inputUsd ? Math.floor(parseFloat(inputUsd) / (0.5 * mealsPerDay * days)) : 0}</span>
+                  <span style={{ fontWeight: 700, color: '#ff9800', margin: '0 4px' }}>
+                    {inputUsd ? Math.floor(parseFloat(inputUsd) / (0.5 * mealsPerDay * days)) : 0}
+                  </span>
                   students.
                 </div>
               </div>
@@ -474,12 +435,12 @@ function DonatePage() {
               {/* Progress */}
               <div className="space-y-4 mb-8">
                 <div className="text-3xl font-bold">
-                  {totalDonated === null || inputEth === null
+                  {totalDonated === null || ethPrice === null
                     ? 'Loading...'
-                    : `$${Number(totalDonated * inputEth).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    : `$${Number(totalDonated * ethPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   <span className="text-lg text-orange-600 font-normal"> raised</span>
                 </div>
-                
+
                 <div className="text-sm text-gray-600">
                   $3,000 goal · {numDeposits === null ? 'Loading...' : `${numDeposits} donation${numDeposits === 1 ? '' : 's'}`}
                 </div>
@@ -488,13 +449,13 @@ function DonatePage() {
                 <div className="h-4 bg-gray-200 rounded-full overflow-hidden relative">
                   {(() => {
                     let percent = 0;
-                    if (totalDonated !== null && inputEth !== null) {
-                      const donatedUSD = Number(totalDonated) * inputEth;
+                    if (totalDonated !== null && ethPrice !== null) {
+                      const donatedUSD = Number(totalDonated) * ethPrice;
                       percent = Math.min(100, (donatedUSD / DONATION_GOAL) * 100);
                     }
                     return (
                       <>
-                        <div 
+                        <div
                           className="h-full bg-orange-500 transition-all duration-500"
                           style={{ width: `${percent}%` }}
                         ></div>
@@ -511,28 +472,37 @@ function DonatePage() {
               <div className="border-t border-gray-200 pt-6 space-y-6">
                 <div>
                   <h4 className="font-semibold mb-2">Your Contribution</h4>
-                  {address && userContribution !== null ? (
+                  {connected && userContribution !== null ? (
                     <div className="text-orange-600 font-bold">{userContribution} ETH</div>
                   ) : (
                     <div className="text-gray-500 text-sm">Connect wallet to see</div>
                   )}
                 </div>
 
-                {/* Wallet Connection */}
-                {!address ? (
-                  <button
-                    onClick={connectWallet}
-                    className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl hover:bg-orange-600 transition-colors"
-                  >
-                    Connect Wallet
-                  </button>
-                ) : (
-                  <div className="text-sm text-green-600 font-medium">
-                    ✓ Wallet Connected: {address.slice(0, 6)}...{address.slice(-4)}
-                  </div>
-                )}
+    
+                        {!connected ? (
+                          <button
+                          onClick={connectWallet}
+                          disabled={walletLoading}
+                          className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50"
+                          >
+                          {walletLoading ? 'Connecting...' : 'Connect Wallet'}
+                          </button>
+                        ) : (
+                          <div className="space-y-2">
+                          <div className="text-sm text-green-600 font-medium">
+                            ✓ Wallet Connected: {connectedAddress?.slice(0, 6)}...{connectedAddress?.slice(-4)}
+                          </div>
+                          <button
+                            onClick={() => walletProvider?.disconnect?.()}
+                            className="w-full bg-red-500 text-white font-bold py-2 rounded-xl hover:bg-red-600 transition-colors"
+                          >
+                            Disconnect Wallet
+                          </button>
+                          </div>
+                        )}
 
-                {/* Amount Inputs */}
+                        {/* Amount Inputs */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium mb-1">ETH Amount</label>
@@ -563,9 +533,9 @@ function DonatePage() {
                 </div>
 
                 {/* Donate Button */}
-                <button 
-                  onClick={donate} 
-                  disabled={!address || !inputEth || !projectId || loading}
+                <button
+                  onClick={donate}
+                  disabled={!connected || !inputEth || !projectId || loading}
                   className="w-full bg-orange-500 text-white font-bold py-4 rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {loading ? (
@@ -617,7 +587,7 @@ function DonatePage() {
 
       {/* Image Modal */}
       {imageModalOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
           onClick={() => setImageModalOpen(false)}
         >
@@ -640,4 +610,4 @@ function DonatePage() {
   );
 }
 
-export default DonatePage; 
+export default DonatePage;
